@@ -1,0 +1,257 @@
+import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
+import { X } from 'lucide-react';
+import { useInventoryStore } from '../stores/inventoryStore';
+import type { InventoryItem } from '../types';
+
+interface InventoryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  item?: InventoryItem | null;
+  /** Overrides header when editing (e.g. clinic staff: "Edit Item Details") */
+  editTitle?: string;
+}
+
+export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryModalProps) {
+  const { addItem, updateItem } = useInventoryStore();
+  const [formData, setFormData] = useState({
+    name: '',
+    category: '',
+    stock: 0,
+    price: 0,
+    expiryDate: ''
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (item) {
+      setFormData({
+        name: item.name,
+        category: item.category,
+        stock: item.stock,
+        price: item.price,
+        expiryDate: item.expiryDate
+      });
+    } else {
+      setFormData({
+        name: '',
+        category: '',
+        stock: 0,
+        price: 0,
+        expiryDate: ''
+      });
+    }
+    setErrors({});
+  }, [item, isOpen]);
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required';
+    }
+    if (!formData.category.trim()) {
+      newErrors.category = 'Category is required';
+    }
+    // Stock validation removed - admin cannot set stock
+    if (formData.price <= 0) {
+      newErrors.price = 'Price must be greater than 0';
+    }
+    if (!formData.expiryDate) {
+      newErrors.expiryDate = 'Expiry date is required';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+
+    setIsSubmitting(true);
+    try {
+      if (item) {
+        // When editing, only update name, category, price, and expiry date (not stock)
+        await updateItem(item.id, {
+          name: formData.name,
+          category: formData.category,
+          price: formData.price,
+          expiryDate: formData.expiryDate,
+          // Stock is not updated - it's managed by clinic staff
+        });
+      } else {
+        // When adding new item, set stock to 0 (admin cannot set stock - only clinic staff can)
+        await addItem({
+          name: formData.name,
+          category: formData.category,
+          stock: 0, // Stock starts at 0, clinic staff will add stock
+          price: formData.price,
+          expiryDate: formData.expiryDate,
+        });
+      }
+      onClose();
+    } catch (error) {
+      console.error('Failed to save item:', error);
+      setErrors({ submit: 'Failed to save item. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={onClose} />
+        <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+          <div className="flex items-center justify-between p-6 border-b">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {item ? (editTitle ?? 'Edit Item') : 'Add New Item'}
+            </h3>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.name ? 'border-red-500' : 'border-gray-300'
+                }`}
+                placeholder="Enter item name"
+              />
+              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Category *
+              </label>
+              <select
+                value={formData.category}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, category: e.target.value })}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.category ? 'border-red-500' : 'border-gray-300'
+                }`}
+              >
+                <option value="">Select category</option>
+                <option value="Medication">Medication</option>
+                <option value="Surgical">Surgical</option>
+                <option value="Diagnostic">Diagnostic</option>
+                <option value="Supplies">Supplies</option>
+                <option value="Equipment">Equipment</option>
+              </select>
+              {errors.category && <p className="text-red-500 text-sm mt-1">{errors.category}</p>}
+            </div>
+
+            {!item && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Price (₱) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.price}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.price ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
+                <p className="text-xs text-gray-500 mt-1">Stock will be set to 0. Clinic staff will manage stock quantities.</p>
+              </div>
+            )}
+            {item && (
+              <div className="space-y-4">
+                <div>
+                  <span className="block text-sm font-medium text-gray-700 mb-2">
+                    Current Stock
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-2xl font-bold tabular-nums text-gray-900">
+                      {item.stock}
+                    </span>
+                    <span
+                      className="inline-flex items-center rounded-full border border-[#8B5A36]/35 bg-[#F4E4D4] px-2.5 py-0.5 text-xs font-medium text-[#5C4033] shadow-sm"
+                    >
+                      units in stock
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Price (₱) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.price ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Expiry Date *
+              </label>
+              <input
+                type="date"
+                value={formData.expiryDate}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, expiryDate: e.target.value })}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  errors.expiryDate ? 'border-red-500' : 'border-gray-300'
+                }`}
+              />
+              {errors.expiryDate && <p className="text-red-500 text-sm mt-1">{errors.expiryDate}</p>}
+            </div>
+
+            {errors.submit && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-red-600 text-sm">{errors.submit}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex-1 px-4 py-2 bg-[#8B5A36] text-white rounded-lg hover:bg-[#5C4033] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? 'Saving...' : (item ? 'Update' : 'Add') + ' Item'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
