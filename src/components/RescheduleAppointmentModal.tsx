@@ -302,10 +302,13 @@ export function RescheduleAppointmentModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={onClose} />
-        <div className="relative w-full max-w-lg rounded-lg bg-white shadow-xl">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto p-4">
+      <div
+        className="absolute inset-0 z-0 bg-gray-600 bg-opacity-75"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="relative z-10 w-full max-w-lg rounded-lg bg-white shadow-xl">
           <div className="flex items-center justify-between border-b p-4 sm:p-6">
             <div className="flex items-center gap-2">
               <CalendarClock className="h-6 w-6 text-purple-600" />
@@ -475,7 +478,6 @@ export function RescheduleAppointmentModal({
             </div>
           </form>
         </div>
-      </div>
     </div>
   );
 }

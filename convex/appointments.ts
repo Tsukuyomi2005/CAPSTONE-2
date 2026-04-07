@@ -1,6 +1,8 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
+import { normalizeOwnerEmail } from "./notifications";
 
 /**
  * Query all appointments
@@ -205,7 +207,16 @@ export const add = mutation({
   },
   returns: v.id("appointments"),
   handler: async (ctx, args) => {
-    return await ctx.db.insert("appointments", args);
+    const id = await ctx.db.insert("appointments", args);
+    if (args.status === "pending") {
+      await ctx.runMutation(internal.notifications.insertInternal, {
+        audience: "admin",
+        ownerEmail: "",
+        kind: "new_appointment_request",
+        appointmentId: id,
+      });
+    }
+    return id;
   },
 });
 
@@ -298,6 +309,42 @@ export const update = mutation({
     }
 
     await ctx.db.patch(id, updates);
+
+    const nextEmail = updates.email !== undefined ? updates.email : appointment.email;
+    const ownerKey = normalizeOwnerEmail(nextEmail);
+    const prevStatus = appointment.status;
+    const nextStatus =
+      updates.status !== undefined ? updates.status : appointment.status;
+
+    if (nextStatus === "approved" && prevStatus !== "approved") {
+      await ctx.runMutation(internal.notifications.insertInternal, {
+        audience: "owner",
+        ownerEmail: ownerKey,
+        kind: "appointment_confirmed",
+        appointmentId: id,
+      });
+    }
+    if (nextStatus === "rejected" && prevStatus !== "rejected") {
+      await ctx.runMutation(internal.notifications.insertInternal, {
+        audience: "owner",
+        ownerEmail: ownerKey,
+        kind: "appointment_rejected",
+        appointmentId: id,
+      });
+    }
+    if (
+      nextStatus === "cancelled" &&
+      cancelSource === "owner" &&
+      prevStatus !== "cancelled"
+    ) {
+      await ctx.runMutation(internal.notifications.insertInternal, {
+        audience: "admin",
+        ownerEmail: "",
+        kind: "owner_cancellation",
+        appointmentId: id,
+      });
+    }
+
     return null;
   },
 });
@@ -533,6 +580,23 @@ export const reschedule = mutation({
       rescheduleCount,
       rescheduleHistory: history,
     });
+
+    const ownerKey = normalizeOwnerEmail(apt.email);
+    if (isAdmin) {
+      await ctx.runMutation(internal.notifications.insertInternal, {
+        audience: "owner",
+        ownerEmail: ownerKey,
+        kind: "appointment_rescheduled_by_admin",
+        appointmentId: args.id,
+      });
+    } else if (nextStatus === "pending") {
+      await ctx.runMutation(internal.notifications.insertInternal, {
+        audience: "admin",
+        ownerEmail: "",
+        kind: "owner_reschedule_request",
+        appointmentId: args.id,
+      });
+    }
 
     return null;
   },

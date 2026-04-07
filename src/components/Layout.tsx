@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useRoleStore } from '../stores/roleStore';
 import { cn } from '../lib/utils';
+import { NotificationBell } from './NotificationBell';
 
 // Custom Dashboard Icon Component
 const DashboardIcon = ({ className }: { className?: string }) => (
@@ -329,21 +330,22 @@ export function Layout({ children }: LayoutProps) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="bg-white border-b px-4 lg:px-6 h-16 flex items-center justify-between">
+        <header className="bg-white border-b border-[#5C4033]/10 px-4 lg:px-6 h-16 flex items-center justify-between gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden text-gray-500 hover:text-gray-700"
+            className="lg:hidden text-gray-500 hover:text-gray-700 shrink-0"
           >
             <Menu className="h-6 w-6" />
           </button>
-          
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3 ml-auto">
             <span className={cn(
-              "px-3 py-1 rounded-full text-xs font-medium capitalize",
+              "px-3 py-1 rounded-full text-xs font-medium capitalize shrink-0",
               getRoleBadgeColor()
             )}>
               {role === 'vet' ? 'Admin' : role === 'staff' ? 'Staff Member' : role === 'veterinarian' ? 'Veterinarian' : role === 'clinicStaff' ? 'Clinic Staff' : role === 'owner' ? 'Pet Owner' : 'Guest'}
             </span>
+            <NotificationBell />
           </div>
         </header>
 

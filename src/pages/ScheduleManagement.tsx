@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Filter, ChevronLeft, ChevronRight, Calendar, CalendarClock, Clock, Hourglass, CheckCircle, X } from 'lucide-react';
 import { useAvailabilityStore } from '../stores/availabilityStore';
 import { useStaffStore } from '../stores/staffStore';
@@ -47,10 +49,22 @@ const getVetName = () => {
   return 'Veterinarian'; // Fallback
 };
 
+/** Monday 00:00 of the week that contains the given YYYY-MM-DD (matches grid week logic). */
+function mondayOfWeekContainingYmd(dateStr: string): Date {
+  const d = new Date(`${dateStr}T12:00:00`);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d);
+  monday.setDate(diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
 export function ScheduleManagement() {
   const { allAvailability } = useAvailabilityStore();
   const { staff } = useStaffStore();
-  const { appointments, updateAppointment } = useAppointmentStore();
+  const { appointments, updateAppointment, appointmentsLoaded } = useAppointmentStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { services } = useServiceStore();
   const { role } = useRoleStore();
   
@@ -123,6 +137,45 @@ export function ScheduleManagement() {
     return monday;
   });
   const [showFilters, setShowFilters] = useState(false);
+
+  const appointmentFromUrl = searchParams.get('appointment');
+  /** Latest list without re-running deep-link effect on every Convex subscription tick */
+  const appointmentsRef = useRef(appointments);
+  appointmentsRef.current = appointments;
+  /** One open per ?appointment= id (avoids re-entrancy when `appointments` ref updates) */
+  const deepLinkHandledForIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!appointmentFromUrl) {
+      deepLinkHandledForIdRef.current = null;
+      return;
+    }
+    if (!appointmentsLoaded) return;
+    if (deepLinkHandledForIdRef.current === appointmentFromUrl) return;
+
+    const apt = appointmentsRef.current.find((a) => a.id === appointmentFromUrl);
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('appointment');
+        return next;
+      },
+      { replace: true },
+    );
+
+    deepLinkHandledForIdRef.current = appointmentFromUrl;
+
+    if (apt) {
+      queueMicrotask(() => {
+        setCurrentWeekStart(mondayOfWeekContainingYmd(apt.date));
+        setWeeklyDetailAppointment(apt);
+        setShowWeeklyDetailModal(true);
+      });
+    } else {
+      toast.error('Appointment not found.');
+    }
+  }, [appointmentFromUrl, appointmentsLoaded, setSearchParams]);
 
   // Get all active staff (both veterinarians and clinic staff)
   // For veterinarians, only show their own schedule
@@ -738,28 +791,41 @@ export function ScheduleManagement() {
         time={appointmentToReject ? formatTime12Hour(formatTime24Hour(appointmentToReject.time)) : undefined}
       />
 
-      {/* Weekly grid: appointment details (same fields as pet owner), then Reschedule opens modal */}
-      {showWeeklyDetailModal && weeklyDetailAppointment && (
-        <div className="fixed inset-0 z-[55] overflow-y-auto">
-          <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={closeWeeklyAppointmentDetails} />
-            <div className="relative w-full max-w-2xl rounded-lg bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b p-6">
-                <h3 className="text-xl font-semibold text-gray-900">
+      {/* Weekly details: portaled to document.body so clicks work (main overflow creates bad fixed/stacking). z-[65] &lt; Reschedule z-[70]. */}
+      {showWeeklyDetailModal &&
+        weeklyDetailAppointment &&
+        createPortal(
+          <div className="fixed inset-0 z-[65] flex items-center justify-center overflow-y-auto p-4">
+            <div
+              className="absolute inset-0 z-0 bg-gray-600 bg-opacity-75"
+              onClick={closeWeeklyAppointmentDetails}
+              aria-hidden
+            />
+            <div
+              className="relative z-10 flex w-full max-w-2xl flex-col max-h-[min(90vh,calc(100dvh-2rem))] rounded-lg bg-white shadow-xl outline-none"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="weekly-detail-dialog-title"
+            >
+              <div className="flex shrink-0 items-center justify-between border-b p-6">
+                <h3
+                  id="weekly-detail-dialog-title"
+                  className="text-xl font-semibold text-gray-900 pr-2"
+                >
                   Appointment Details —{' '}
                   {generateSequentialAppointmentId(weeklyDetailAppointment.id, appointmentIdMap)}
                 </h3>
                 <button
                   type="button"
                   onClick={closeWeeklyAppointmentDetails}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                   aria-label="Close"
                 >
                   <X className="h-6 w-6" />
                 </button>
               </div>
 
-              <div className="space-y-4 p-6">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Service</p>
@@ -840,7 +906,7 @@ export function ScheduleManagement() {
                 )}
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2 border-t p-6">
+              <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-white p-6">
                 {canRescheduleFromWeeklyGrid &&
                   weeklyDetailAppointment.status !== 'cancelled' &&
                   weeklyDetailAppointment.status !== 'rejected' && (
@@ -862,9 +928,9 @@ export function ScheduleManagement() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       <RescheduleAppointmentModal
         key={appointmentToReschedule?.id ?? 'closed'}

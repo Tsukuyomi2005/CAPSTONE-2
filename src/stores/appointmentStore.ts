@@ -113,6 +113,7 @@ export function useAppointmentStore() {
 
   const appointments: Appointment[] = appointmentsData?.map(convertAppointment) ?? [];
   const allAppointments: Appointment[] = allAppointmentsData?.map(convertAppointment) ?? [];
+  const appointmentsLoaded = appointmentsData !== undefined;
 
   const addAppointment = async (appointment: Omit<Appointment, 'id'>) => {
     await addAppointmentMutation({
@@ -225,6 +226,7 @@ export function useAppointmentStore() {
   return {
     appointments,
     allAppointments,
+    appointmentsLoaded,
     currentUserEmail,
     addAppointment,
     updateAppointment,

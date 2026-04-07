@@ -129,6 +129,21 @@ const applicationTables = {
   })
     .index("by_username", ["username"])
     .index("by_email", ["email"]),
+  /** In-app notifications: owners by email; admins (vet/staff) share one feed */
+  clinicNotifications: defineTable({
+    audience: v.union(v.literal("owner"), v.literal("admin")),
+    ownerEmail: v.string(),
+    kind: v.union(
+      v.literal("appointment_confirmed"),
+      v.literal("appointment_rejected"),
+      v.literal("appointment_rescheduled_by_admin"),
+      v.literal("new_appointment_request"),
+      v.literal("owner_reschedule_request"),
+      v.literal("owner_cancellation"),
+    ),
+    appointmentId: v.optional(v.id("appointments")),
+    read: v.boolean(),
+  }).index("by_audience_ownerEmail", ["audience", "ownerEmail"]),
   petRecords: defineTable({
     ownerEmail: v.string(), // Email of the pet owner who owns this record
     petType: v.optional(v.union(v.literal("dog"), v.literal("cat"))),
