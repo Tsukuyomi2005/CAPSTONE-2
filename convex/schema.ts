@@ -73,9 +73,11 @@ const applicationTables = {
           reasonDetail: v.optional(v.string()),
           rescheduledAt: v.string(),
           actor: v.union(v.literal("owner"), v.literal("admin")),
-        }),
+        }        ),
       ),
     ),
+    ownerCancellationReasonCode: v.optional(v.string()),
+    ownerCancellationReasonDetail: v.optional(v.string()),
   })
     .index("by_date", ["date"])
     .index("by_email", ["email"]),

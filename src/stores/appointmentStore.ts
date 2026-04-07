@@ -34,6 +34,8 @@ function convertAppointment(doc: {
   }>;
   rescheduleCount?: number;
   rescheduleHistory?: Appointment['rescheduleHistory'];
+  ownerCancellationReasonCode?: string;
+  ownerCancellationReasonDetail?: string;
 }): Appointment {
   return {
     id: doc._id,
@@ -55,6 +57,8 @@ function convertAppointment(doc: {
     itemsUsed: doc.itemsUsed,
     rescheduleCount: doc.rescheduleCount,
     rescheduleHistory: doc.rescheduleHistory,
+    ownerCancellationReasonCode: doc.ownerCancellationReasonCode,
+    ownerCancellationReasonDetail: doc.ownerCancellationReasonDetail,
   };
 }
 
@@ -129,9 +133,14 @@ export function useAppointmentStore() {
     });
   };
 
-  const updateAppointment = async (id: string, updates: Partial<Appointment>) => {
+  const updateAppointment = async (
+    id: string,
+    updates: Partial<Appointment>,
+    options?: { cancelSource?: 'owner' | 'admin' },
+  ) => {
     const updateData: {
       id: Id<"appointments">;
+      cancelSource?: 'owner' | 'admin';
       petName?: string;
       ownerName?: string;
       phone?: string;
@@ -155,6 +164,8 @@ export function useAppointmentStore() {
         loggedAt?: string;
         rejectedReason?: string;
       }>;
+      ownerCancellationReasonCode?: string;
+      ownerCancellationReasonDetail?: string;
     } = {
       id: id as Id<"appointments">,
     };
@@ -174,6 +185,13 @@ export function useAppointmentStore() {
     if (updates.paymentStatus !== undefined) updateData.paymentStatus = updates.paymentStatus;
     if (updates.paymentData !== undefined) updateData.paymentData = updates.paymentData;
     if (updates.itemsUsed !== undefined) updateData.itemsUsed = updates.itemsUsed;
+    if (updates.ownerCancellationReasonCode !== undefined) {
+      updateData.ownerCancellationReasonCode = updates.ownerCancellationReasonCode;
+    }
+    if (updates.ownerCancellationReasonDetail !== undefined) {
+      updateData.ownerCancellationReasonDetail = updates.ownerCancellationReasonDetail;
+    }
+    if (options?.cancelSource !== undefined) updateData.cancelSource = options.cancelSource;
 
     await updateAppointmentMutation(updateData);
   };

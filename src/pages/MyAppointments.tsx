@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 import { useAppointmentStore } from '../stores/appointmentStore';
 import { useServiceStore } from '../stores/serviceStore';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { OwnerCancelAppointmentDialog } from '../components/OwnerCancelAppointmentDialog';
+import { OwnerCancellationSummary } from '../components/OwnerCancellationSummary';
 import { RescheduleAppointmentModal } from '../components/RescheduleAppointmentModal';
 import { AppointmentStatusBadges, RescheduleHistorySection } from '../components/AppointmentRescheduleUi';
 import { toast } from 'sonner';
@@ -198,11 +199,22 @@ export function MyAppointments() {
     setShowCancelDialog(true);
   };
 
-  const handleConfirmCancel = async () => {
+  const handleConfirmCancel = async (payload: {
+    reasonCode: string;
+    reasonDetail: string;
+  }) => {
     if (!appointmentToCancel) return;
 
     try {
-      await updateAppointment(appointmentToCancel.id, { status: 'cancelled' });
+      await updateAppointment(
+        appointmentToCancel.id,
+        {
+          status: 'cancelled',
+          ownerCancellationReasonCode: payload.reasonCode,
+          ownerCancellationReasonDetail: payload.reasonDetail || undefined,
+        },
+        { cancelSource: 'owner' },
+      );
       toast.success('Appointment cancelled successfully');
       setShowCancelDialog(false);
       setAppointmentToCancel(null);
@@ -528,6 +540,7 @@ export function MyAppointments() {
                   )}
                 </div>
                 <RescheduleHistorySection appointment={selectedAppointment} />
+                <OwnerCancellationSummary appointment={selectedAppointment} />
                 {selectedAppointment.reason && (
                   <div>
                     <p className="text-sm text-gray-600 mb-1">Reason for Visit</p>
@@ -555,19 +568,14 @@ export function MyAppointments() {
         </div>
       )}
 
-      {/* Cancel Confirmation Dialog */}
-      <ConfirmDialog
+      <OwnerCancelAppointmentDialog
         isOpen={showCancelDialog}
         onClose={() => {
           setShowCancelDialog(false);
           setAppointmentToCancel(null);
         }}
         onConfirm={handleConfirmCancel}
-        title="Cancel Appointment"
-        message={`Are you sure you want to cancel this appointment? This action cannot be undone.`}
-        confirmText="Yes, Cancel"
-        cancelText="No"
-        confirmVariant="danger"
+        petName={appointmentToCancel?.petName}
       />
 
       <RescheduleAppointmentModal

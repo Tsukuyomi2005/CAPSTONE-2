@@ -48,6 +48,8 @@ export interface Appointment {
     rescheduledAt: string;
     actor: 'owner' | 'admin';
   }>;
+  ownerCancellationReasonCode?: string;
+  ownerCancellationReasonDetail?: string;
 }
 
 export interface PetRecord {

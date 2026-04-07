@@ -9,6 +9,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { RejectAppointmentDialog } from '../components/RejectAppointmentDialog';
 import { RescheduleAppointmentModal } from '../components/RescheduleAppointmentModal';
 import { AppointmentStatusBadges, RescheduleHistorySection } from '../components/AppointmentRescheduleUi';
+import { OwnerCancellationSummary } from '../components/OwnerCancellationSummary';
 import { toast } from 'sonner';
 import type { Appointment } from '../types';
 import { createAppointmentIdMap, generateAppointmentId as generateSequentialAppointmentId } from '../utils/appointmentId';
@@ -824,6 +825,7 @@ export function ScheduleManagement() {
                   )}
                 </div>
                 <RescheduleHistorySection appointment={weeklyDetailAppointment} />
+                <OwnerCancellationSummary appointment={weeklyDetailAppointment} />
                 {weeklyDetailAppointment.reason && (
                   <div>
                     <p className="mb-1 text-sm text-gray-600">Reason for Visit</p>

@@ -1,9 +1,12 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
 import { useAppointmentStore } from '../stores/appointmentStore';
 import { useAvailabilityStore } from '../stores/availabilityStore';
 import { useServiceStore } from '../stores/serviceStore';
 import type { Appointment } from '../types';
+import { OwnerCancellationSummary } from '../components/OwnerCancellationSummary';
+import { AppointmentStatusBadges } from '../components/AppointmentRescheduleUi';
 
 // Get veterinarian's full name from localStorage
 const getVetName = () => {
@@ -27,7 +30,7 @@ const getVetName = () => {
 };
 
 export function VetMyAppointments() {
-  const { appointments, updateAppointment } = useAppointmentStore();
+  const { appointments } = useAppointmentStore();
   const { allAvailability } = useAvailabilityStore();
   const { services } = useServiceStore();
   
@@ -42,6 +45,7 @@ export function VetMyAppointments() {
   });
 
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [detailAppointment, setDetailAppointment] = useState<Appointment | null>(null);
 
   // Filter appointments for this veterinarian only
   const vetAppointments = useMemo(() => {
@@ -324,6 +328,15 @@ export function VetMyAppointments() {
                         {dayAppointments.map((apt) => (
                           <div
                             key={apt.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setDetailAppointment(apt)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setDetailAppointment(apt);
+                              }
+                            }}
                             className={`border rounded p-2 text-xs transition-colors cursor-pointer ${getStatusColorClasses(apt)}`}
                           >
                             <div className="font-medium text-gray-900">
@@ -372,7 +385,16 @@ export function VetMyAppointments() {
               {upcomingAppointments.map((apt) => (
                 <div
                   key={apt.id}
-                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetailAppointment(apt)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setDetailAppointment(apt);
+                    }
+                  }}
+                  className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
                     <div className="p-2 bg-blue-100 rounded-lg">
@@ -398,6 +420,79 @@ export function VetMyAppointments() {
           )}
         </div>
       </div>
+
+      {detailAppointment &&
+        createPortal(
+          <div className="fixed inset-0 z-[200] flex min-h-[100dvh] items-center justify-center overflow-y-auto p-4">
+            <button
+              type="button"
+              className="fixed inset-0 min-h-[100dvh] w-full bg-gray-600/75"
+              aria-label="Close"
+              onClick={() => setDetailAppointment(null)}
+            />
+            <div
+              className="relative z-10 w-full max-w-lg rounded-lg bg-white shadow-xl"
+              role="dialog"
+              aria-modal="true"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b p-4">
+                <h3 className="text-lg font-semibold text-gray-900">Appointment details</h3>
+                <button
+                  type="button"
+                  onClick={() => setDetailAppointment(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Close"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="space-y-3 p-4 text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-gray-500">Pet</p>
+                    <p className="font-medium text-gray-900">{detailAppointment.petName}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Owner</p>
+                    <p className="font-medium text-gray-900">{detailAppointment.ownerName}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Date</p>
+                    <p className="font-medium text-gray-900">{formatDateDisplay(detailAppointment.date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Time</p>
+                    <p className="font-medium text-gray-900">
+                      {formatTime12Hour(formatTime24Hour(detailAppointment.time))}
+                    </p>
+                  </div>
+                </div>
+                {detailAppointment.serviceType && (
+                  <div>
+                    <p className="text-gray-500">Service</p>
+                    <p className="font-medium text-gray-900">{getServiceName(detailAppointment.serviceType)}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-gray-500 mb-1">Status</p>
+                  <AppointmentStatusBadges appointment={detailAppointment} />
+                </div>
+                <OwnerCancellationSummary appointment={detailAppointment} />
+              </div>
+              <div className="border-t p-4">
+                <button
+                  type="button"
+                  onClick={() => setDetailAppointment(null)}
+                  className="w-full rounded-lg bg-gray-700 py-2 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

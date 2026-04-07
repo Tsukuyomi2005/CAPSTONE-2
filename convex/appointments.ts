@@ -73,6 +73,8 @@ export const list = query({
           }),
         ),
       ),
+      ownerCancellationReasonCode: v.optional(v.string()),
+      ownerCancellationReasonDetail: v.optional(v.string()),
     })
   ),
   handler: async (ctx, args) => {
@@ -157,6 +159,8 @@ export const listByDate = query({
           }),
         ),
       ),
+      ownerCancellationReasonCode: v.optional(v.string()),
+      ownerCancellationReasonDetail: v.optional(v.string()),
     })
   ),
   handler: async (ctx, args) => {
@@ -204,6 +208,17 @@ export const add = mutation({
     return await ctx.db.insert("appointments", args);
   },
 });
+
+const OWNER_CANCEL_REASON_CODES = new Set([
+  "schedule_conflict",
+  "pet_health",
+  "personal_emergency",
+  "transportation",
+  "weather_travel",
+  "found_alternative",
+  "financial",
+  "other",
+]);
 
 /**
  * Update an appointment
@@ -255,14 +270,33 @@ export const update = mutation({
       approvedByName: v.optional(v.string()),
       approvedAt: v.optional(v.string()),
     }))),
+    ownerCancellationReasonCode: v.optional(v.string()),
+    ownerCancellationReasonDetail: v.optional(v.string()),
+    cancelSource: v.optional(
+      v.union(v.literal("owner"), v.literal("admin")),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, cancelSource, ...updates } = args;
     const appointment = await ctx.db.get(id);
     if (!appointment) {
       throw new Error("Appointment not found");
     }
+
+    if (updates.status === "cancelled" && cancelSource === "owner") {
+      const code = updates.ownerCancellationReasonCode;
+      if (!code || !OWNER_CANCEL_REASON_CODES.has(code)) {
+        throw new Error("Please select a valid cancellation reason");
+      }
+      if (
+        code === "other" &&
+        !(updates.ownerCancellationReasonDetail && updates.ownerCancellationReasonDetail.trim())
+      ) {
+        throw new Error("Please add details when selecting Other");
+      }
+    }
+
     await ctx.db.patch(id, updates);
     return null;
   },
