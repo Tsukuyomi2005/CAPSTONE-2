@@ -52,6 +52,7 @@ export function LoginPage() {
           username: user.username || user.email, // Email is used as username
           email: user.email, // Store email explicitly for filtering
           role: user.role,
+          ...(user.termsAcceptedAt != null ? { termsAcceptedAt: user.termsAcceptedAt } : {}),
         }));
         toast.success('Login successful');
         navigate('/dashboard');

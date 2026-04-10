@@ -3,6 +3,11 @@ import { X } from 'lucide-react';
 import { useServiceStore } from '../stores/serviceStore';
 import type { Service } from '../types';
 
+const SERVICE_NAME_MIN = 5;
+const SERVICE_NAME_MAX = 50;
+const SERVICE_DESC_MIN = 25;
+const SERVICE_DESC_MAX = 200;
+
 interface ServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,11 +47,22 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
+    const nameLen = formData.name.trim().length;
     if (!formData.name.trim()) {
       newErrors.name = 'Service name is required';
+    } else if (nameLen < SERVICE_NAME_MIN) {
+      newErrors.name = `Service name must be at least ${SERVICE_NAME_MIN} characters.`;
+    } else if (nameLen > SERVICE_NAME_MAX) {
+      newErrors.name = `Service name must be at most ${SERVICE_NAME_MAX} characters.`;
     }
+
+    const descLen = formData.description.trim().length;
     if (!formData.description.trim()) {
       newErrors.description = 'Description is required';
+    } else if (descLen < SERVICE_DESC_MIN) {
+      newErrors.description = `Description must be at least ${SERVICE_DESC_MIN} characters.`;
+    } else if (descLen > SERVICE_DESC_MAX) {
+      newErrors.description = `Description must be at most ${SERVICE_DESC_MAX} characters.`;
     }
     if (formData.price <= 0) {
       newErrors.price = 'Price must be greater than 0';
@@ -69,8 +85,8 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
     try {
       const durationValue = Number(formData.durationMinutes);
       const payload = {
-        name: formData.name,
-        description: formData.description,
+        name: formData.name.trim(),
+        description: formData.description.trim(),
         price: formData.price,
         durationMinutes: durationValue,
       };
@@ -115,12 +131,16 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
               <input
                 type="text"
                 value={formData.name}
+                maxLength={SERVICE_NAME_MAX}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   errors.name ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="Enter service name"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                {SERVICE_NAME_MIN}–{SERVICE_NAME_MAX} characters ({formData.name.trim().length}/{SERVICE_NAME_MAX} used)
+              </p>
               {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
             </div>
 
@@ -130,6 +150,7 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
               </label>
               <textarea
                 value={formData.description}
+                maxLength={SERVICE_DESC_MAX}
                 onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   errors.description ? 'border-red-500' : 'border-gray-300'
@@ -137,6 +158,9 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
                 rows={3}
                 placeholder="Enter service description"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                {SERVICE_DESC_MIN}–{SERVICE_DESC_MAX} characters ({formData.description.trim().length}/{SERVICE_DESC_MAX} used)
+              </p>
               {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
             </div>
 

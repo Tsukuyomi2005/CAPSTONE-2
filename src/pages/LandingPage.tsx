@@ -939,8 +939,8 @@ export function LandingPage() {
       {/* Footer */}
       <footer className="bg-slate-800 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between">
-            <div className="flex items-center gap-2 mb-4 md:mb-0">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+            <div className="flex items-center justify-center md:justify-start gap-2">
               <div className="rounded-full p-2 bg-[#8B5A36] ring-2 ring-[#C89F7A] ring-offset-2 ring-offset-slate-800">
                 <img 
                   src="/jocari-logo.jpg"
@@ -950,10 +950,27 @@ export function LandingPage() {
               </div>
               <span className="text-xl font-bold">Jocari Pet Clinic and Grooming Salon</span>
             </div>
-            <p className="text-gray-400 text-sm">
-              &copy; 2026  Jocari Pet Clinic and Grooming Salon · Powered by FurSure. All rights reserved.
-            </p>
+            <nav
+              className="flex flex-wrap items-center justify-center md:justify-end gap-x-8 gap-y-2 text-sm"
+              aria-label="Legal"
+            >
+              <Link
+                to="/terms"
+                className="text-gray-300 hover:text-white transition-colors underline-offset-4 hover:underline"
+              >
+                Terms &amp; Conditions
+              </Link>
+              <Link
+                to="/privacy"
+                className="text-gray-300 hover:text-white transition-colors underline-offset-4 hover:underline"
+              >
+                Privacy Policy
+              </Link>
+            </nav>
           </div>
+          <p className="text-gray-400 text-sm text-center md:text-left mt-8 pt-8 border-t border-slate-700">
+            &copy; 2026  Jocari Pet Clinic and Grooming Salon · Powered by FurSure. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>

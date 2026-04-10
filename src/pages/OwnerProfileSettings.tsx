@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
-import { User, Mail, Phone, Save, Lock, MapPin } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { User, Mail, Phone, Save, Lock, MapPin, Scale } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 // Load user profile from registration data
 const loadUserProfile = () => {
@@ -36,10 +39,39 @@ const loadUserProfile = () => {
   };
 };
 
+function getStoredTermsAcceptedAt(username: string | null): number | undefined {
+  if (!username || typeof window === 'undefined') return undefined;
+  try {
+    const storedUsers = JSON.parse(localStorage.getItem('fursure_users') || '{}');
+    return storedUsers[username]?.termsAcceptedAt as number | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function OwnerProfileSettings() {
   const [profile, setProfile] = useState(loadUserProfile());
   const [isEditing, setIsEditing] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const ownerUsername = useMemo(() => {
+    try {
+      const currentUserStr = localStorage.getItem('fursure_current_user');
+      if (!currentUserStr) return null;
+      const u = JSON.parse(currentUserStr) as { username?: string; email?: string };
+      return (u.username || u.email || null) as string | null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const convexUser = useQuery(
+    api.users.getUserByUsername,
+    ownerUsername ? { username: ownerUsername } : 'skip'
+  );
+
+  const termsAcceptedAt =
+    convexUser?.termsAcceptedAt ?? getStoredTermsAcceptedAt(ownerUsername);
 
   // Reload profile when component mounts
   useEffect(() => {
@@ -274,6 +306,38 @@ export function OwnerProfileSettings() {
             <Lock className="h-4 w-4 text-gray-600" />
             <span className="text-gray-700">Change Password</span>
           </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Scale className="h-5 w-5 text-gray-600" />
+            Legal
+          </h2>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-gray-600">
+            Review the agreements that apply to your FurSure account and bookings.
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <Link to="/terms" className="text-purple-600 hover:text-purple-800 hover:underline font-medium">
+              Terms &amp; Conditions
+            </Link>
+            <Link to="/privacy" className="text-purple-600 hover:text-purple-800 hover:underline font-medium">
+              Privacy Policy
+            </Link>
+          </div>
+          <p className="text-sm text-gray-500">
+            Last accepted:{' '}
+            {termsAcceptedAt != null ? (
+              <span className="text-gray-800">
+                {new Date(termsAcceptedAt).toLocaleDateString(undefined, { dateStyle: 'long' })}
+              </span>
+            ) : (
+              <span className="italic">Not on record</span>
+            )}
+          </p>
         </div>
       </div>
     </div>

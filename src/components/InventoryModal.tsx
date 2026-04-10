@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, type ChangeEvent, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { useInventoryStore } from '../stores/inventoryStore';
 import type { InventoryItem } from '../types';
@@ -9,19 +9,31 @@ interface InventoryModalProps {
   item?: InventoryItem | null;
   /** Overrides header when editing (e.g. clinic staff: "Edit Item Details") */
   editTitle?: string;
+  /** When set (e.g. clinic staff inventory), validates item name length */
+  itemNameLength?: { min: number; max: number };
 }
 
-export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryModalProps) {
+export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLength }: InventoryModalProps) {
   const { addItem, updateItem } = useInventoryStore();
   const [formData, setFormData] = useState({
     name: '',
     category: '',
     stock: 0,
-    price: 0,
     expiryDate: ''
   });
+  /** String so the field can be cleared with Backspace (avoids number input quirks) */
+  const [priceInput, setPriceInput] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  /** Local calendar date as YYYY-MM-DD for date input min + validation */
+  const todayMin = useMemo(() => {
+    const n = new Date();
+    const y = n.getFullYear();
+    const m = String(n.getMonth() + 1).padStart(2, '0');
+    const d = String(n.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, [isOpen]);
 
   useEffect(() => {
     if (item) {
@@ -29,36 +41,61 @@ export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryMo
         name: item.name,
         category: item.category,
         stock: item.stock,
-        price: item.price,
         expiryDate: item.expiryDate
       });
+      setPriceInput(
+        item.price !== undefined && item.price !== null ? String(item.price) : ''
+      );
     } else {
       setFormData({
         name: '',
         category: '',
         stock: 0,
-        price: 0,
         expiryDate: ''
       });
+      setPriceInput('');
     }
     setErrors({});
   }, [item, isOpen]);
 
+  const handlePriceInputChange = (raw: string) => {
+    if (raw === '') {
+      setPriceInput('');
+      return;
+    }
+    let v = raw.replace(/[^0-9.]/g, '');
+    const dot = v.indexOf('.');
+    if (dot !== -1) {
+      v = v.slice(0, dot + 1) + v.slice(dot + 1).replace(/\./g, '');
+    }
+    setPriceInput(v);
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
+    const nameLen = formData.name.trim().length;
     if (!formData.name.trim()) {
       newErrors.name = 'Name is required';
+    } else if (itemNameLength) {
+      if (nameLen < itemNameLength.min) {
+        newErrors.name = `Item name must be at least ${itemNameLength.min} characters.`;
+      } else if (nameLen > itemNameLength.max) {
+        newErrors.name = `Item name must be at most ${itemNameLength.max} characters.`;
+      }
     }
     if (!formData.category.trim()) {
       newErrors.category = 'Category is required';
     }
-    // Stock validation removed - admin cannot set stock
-    if (formData.price <= 0) {
+    const parsedPrice = parseFloat(priceInput.trim());
+    if (priceInput.trim() === '' || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
       newErrors.price = 'Price must be greater than 0';
     }
     if (!formData.expiryDate) {
       newErrors.expiryDate = 'Expiry date is required';
+    } else if (formData.expiryDate < todayMin) {
+      newErrors.expiryDate =
+        'Expiry date cannot be in the past. Choose today or a future date.';
     }
 
     setErrors(newErrors);
@@ -70,24 +107,25 @@ export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryMo
     
     if (!validateForm()) return;
 
+    const price = parseFloat(priceInput.trim());
     setIsSubmitting(true);
     try {
       if (item) {
         // When editing, only update name, category, price, and expiry date (not stock)
         await updateItem(item.id, {
-          name: formData.name,
+          name: formData.name.trim(),
           category: formData.category,
-          price: formData.price,
+          price,
           expiryDate: formData.expiryDate,
           // Stock is not updated - it's managed by clinic staff
         });
       } else {
         // When adding new item, set stock to 0 (admin cannot set stock - only clinic staff can)
         await addItem({
-          name: formData.name,
+          name: formData.name.trim(),
           category: formData.category,
           stock: 0, // Stock starts at 0, clinic staff will add stock
-          price: formData.price,
+          price,
           expiryDate: formData.expiryDate,
         });
       }
@@ -127,12 +165,19 @@ export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryMo
               <input
                 type="text"
                 value={formData.name}
+                maxLength={itemNameLength?.max}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   errors.name ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="Enter item name"
               />
+              {itemNameLength && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {itemNameLength.min}–{itemNameLength.max} characters ({formData.name.trim().length}/
+                  {itemNameLength.max} used)
+                </p>
+              )}
               {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
             </div>
 
@@ -163,11 +208,11 @@ export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryMo
                   Price (₱) *
                 </label>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.price}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={priceInput}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => handlePriceInputChange(e.target.value)}
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.price ? 'border-red-500' : 'border-gray-300'
                   }`}
@@ -198,11 +243,11 @@ export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryMo
                     Price (₱) *
                   </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={priceInput}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => handlePriceInputChange(e.target.value)}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.price ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -218,6 +263,7 @@ export function InventoryModal({ isOpen, onClose, item, editTitle }: InventoryMo
               </label>
               <input
                 type="date"
+                min={todayMin}
                 value={formData.expiryDate}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, expiryDate: e.target.value })}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${

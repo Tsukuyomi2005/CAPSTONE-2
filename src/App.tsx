@@ -27,6 +27,8 @@ import { PaymentTransactions } from './pages/PaymentTransactions';
 import { OwnerProfileSettings } from './pages/OwnerProfileSettings';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
+import { TermsPage } from './pages/TermsPage';
+import { PrivacyPage } from './pages/PrivacyPage';
 import { useRoleStore } from './stores/roleStore';
 import { useEffect } from 'react';
 import { initializeAdminAccount } from './utils/initializeAdmin';
@@ -74,6 +76,8 @@ function AppRoutes() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -82,6 +86,8 @@ function AppRoutes() {
   return (
     <Layout>
       <Routes>
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/dashboard" element={
           isVeterinarian ? <VetDashboard /> : 
           isClinicStaff ? <StaffDashboard /> : 

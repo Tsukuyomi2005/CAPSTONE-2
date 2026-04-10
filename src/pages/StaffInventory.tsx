@@ -1092,9 +1092,12 @@ export function StaffInventory() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredItems.map((item) => (
-                  <tr key={item.id} className={`hover:bg-purple-100 transition-colors ${isExpired(item.expiryDate) ? 'bg-gray-50 opacity-60' : ''}`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                {filteredItems.map((item) => {
+                  const expired = isExpired(item.expiryDate);
+                  const expiredMuted = expired ? 'opacity-60' : '';
+                  return (
+                  <tr key={item.id} className={`hover:bg-purple-100 transition-colors ${expired ? 'bg-gray-50' : ''}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                       <div className="flex items-center">
                         {item.category === 'Medication' ? (
                           <MedicationIcon className="h-8 w-8 mr-3" />
@@ -1114,15 +1117,15 @@ export function StaffInventory() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>{item.category}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                       <span className={`text-sm font-medium ${isLowStock(item.stock) ? 'text-red-600' : 'text-gray-900'}`}>
                         {item.stock}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₱{item.price.toFixed(2)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-sm ${isExpired(item.expiryDate) ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>₱{item.price.toFixed(2)}</td>
+                    <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
+                      <span className={`text-sm ${expired ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
                         {new Date(item.expiryDate).toLocaleDateString()}
                       </span>
                     </td>
@@ -1157,7 +1160,7 @@ export function StaffInventory() {
                         variant="table"
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${expiredMuted}`}>
                       {getStockStatus(item) === 'safe' && (
                         <span className="flex items-center gap-1">
                           <span className="text-green-600">🟢</span>
@@ -1178,15 +1181,19 @@ export function StaffInventory() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile Card View */}
           <div className="lg:hidden space-y-4">
-            {filteredItems.map((item) => (
-              <div key={item.id} className={`bg-white rounded-lg p-4 shadow-sm border ${isExpired(item.expiryDate) ? 'opacity-60' : ''}`}>
+            {filteredItems.map((item) => {
+              const expired = isExpired(item.expiryDate);
+              return (
+              <div key={item.id} className="bg-white rounded-lg p-4 shadow-sm border">
+                <div className={expired ? 'opacity-60' : ''}>
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center">
                     {item.category === 'Medication' ? (
@@ -1224,7 +1231,7 @@ export function StaffInventory() {
                   </div>
                   <div>
                     <span className="text-gray-500">Expiry:</span>
-                    <p className={`font-medium ${isExpired(item.expiryDate) ? 'text-red-600' : 'text-gray-900'}`}>
+                    <p className={`font-medium ${expired ? 'text-red-600' : 'text-gray-900'}`}>
                       {new Date(item.expiryDate).toLocaleDateString()}
                     </p>
                   </div>
@@ -1251,6 +1258,7 @@ export function StaffInventory() {
                       )}
                     </p>
                   </div>
+                </div>
                 </div>
                 <div className="pt-3 border-t">
                   <ItemActionsMenu
@@ -1284,7 +1292,8 @@ export function StaffInventory() {
                   />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {filteredItems.length === 0 && (
@@ -1569,6 +1578,7 @@ export function StaffInventory() {
         onClose={handleCatalogModalClose}
         item={catalogEditingItem}
         editTitle="Edit Item Details"
+        itemNameLength={{ min: 3, max: 80 }}
       />
 
       <ConfirmDialog

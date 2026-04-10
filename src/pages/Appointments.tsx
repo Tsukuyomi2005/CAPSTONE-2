@@ -9,6 +9,7 @@ import { useServiceStore } from '../stores/serviceStore';
 import { useStaffStore } from '../stores/staffStore';
 import { useAvailabilityStore } from '../stores/availabilityStore';
 import { PaymentModal } from '../components/PaymentModal';
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { AppointmentActions } from '../components/AppointmentActions';
 import { toast } from 'sonner';
 import type { Appointment, Service } from '../types';
@@ -45,6 +46,7 @@ export function Appointments() {
   });
   const [showPayment, setShowPayment] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'at_clinic' | 'online'>('at_clinic');
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   // Get stored user data for pet owners (try raw key and lowercase for compatibility)
   const getStoredOwnerData = (): { email?: string; phone?: string; firstName?: string; lastName?: string; username?: string } | null => {
@@ -1141,6 +1143,26 @@ export function Appointments() {
             </div>
           </div>
 
+          <p className="text-sm text-gray-600 mb-4">
+            By clicking &quot;Book Appointment&quot;, you agree to FurSure&apos;s{' '}
+            <button
+              type="button"
+              className="text-purple-600 font-medium hover:underline"
+              onClick={() => setLegalModal('terms')}
+            >
+              Terms &amp; Conditions
+            </button>{' '}
+            and{' '}
+            <button
+              type="button"
+              className="text-purple-600 font-medium hover:underline"
+              onClick={() => setLegalModal('privacy')}
+            >
+              Privacy Policy
+            </button>
+            .
+          </p>
+
           {/* Navigation Buttons */}
           <div className="flex justify-between">
             <button
@@ -1159,6 +1181,12 @@ export function Appointments() {
           </div>
         </div>
       )}
+
+      <LegalDocumentModal
+        isOpen={legalModal !== null}
+        onClose={() => setLegalModal(null)}
+        document={legalModal}
+      />
 
       <PaymentModal
         isOpen={showPayment}

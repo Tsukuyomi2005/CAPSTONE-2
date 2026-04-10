@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, Heart } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { useRoleStore } from '../stores/roleStore';
 import { toast } from 'sonner';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { LegalDocumentModal } from '../components/LegalDocumentModal';
 
 export function SignupPage() {
   const navigate = useNavigate();
@@ -22,11 +23,18 @@ export function SignupPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [agreedToLegal, setAgreedToLegal] = useState(false);
+  const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
 
   const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    if (field === 'phone') {
+      const digitsOnly = value.replace(/\D/g, '').slice(0, 11);
+      setFormData((prev) => ({ ...prev, phone: digitsOnly }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    }
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
+      setErrors((prev) => ({ ...prev, [field]: '' }));
     }
   };
 
@@ -44,8 +52,11 @@ export function SignupPage() {
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email is invalid';
     }
-    if (!formData.phone.trim()) {
+    if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
+    } else if (!/^09\d{9}$/.test(formData.phone)) {
+      newErrors.phone =
+        'Please enter a valid Philippine mobile number starting with 09';
     }
     if (!formData.address.trim()) {
       newErrors.address = 'Address is required';
@@ -59,6 +70,9 @@ export function SignupPage() {
       newErrors.confirmPassword = 'Please confirm your password';
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
+    }
+    if (!agreedToLegal) {
+      newErrors.agreedToLegal = 'You must agree to the Terms & Conditions and Privacy Policy to register';
     }
 
     setErrors(newErrors);
@@ -83,6 +97,8 @@ export function SignupPage() {
 
     setIsSubmitting(true);
 
+    const termsAcceptedAt = Date.now();
+
     try {
       // Register user in Convex (use email as username)
       try {
@@ -95,6 +111,7 @@ export function SignupPage() {
           lastName: formData.lastName,
           phone: formData.phone,
           address: formData.address,
+          termsAcceptedAt,
         });
       } catch (convexError: any) {
         // If Convex registration fails, continue with localStorage only
@@ -113,6 +130,7 @@ export function SignupPage() {
         lastName: formData.lastName,
         phone: formData.phone,
         address: formData.address,
+        termsAcceptedAt,
       };
       localStorage.setItem('fursure_users', JSON.stringify(storedUsers));
 
@@ -122,6 +140,7 @@ export function SignupPage() {
         username: emailKey, // Normalized email is used as username
         email: emailKey, // Store email explicitly for filtering
         role: 'owner',
+        termsAcceptedAt,
       }));
 
       toast.success('Registration successful! Welcome to Jocari Pet Clinic and Grooming Salon');
@@ -237,12 +256,15 @@ export function SignupPage() {
                   id="phone"
                   name="phone"
                   type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  maxLength={11}
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
                   className={`block w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent ${
                     errors.phone ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder="Phone Number"
+                  placeholder="09XXXXXXXXX (11 digits)"
                 />
                 {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
               </div>
@@ -357,6 +379,41 @@ export function SignupPage() {
               </div>
             )}
 
+            <div className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50/80 p-4">
+              <input
+                id="agree-legal"
+                type="checkbox"
+                checked={agreedToLegal}
+                onChange={(e) => {
+                  setAgreedToLegal(e.target.checked);
+                  if (errors.agreedToLegal) {
+                    setErrors((prev) => ({ ...prev, agreedToLegal: '' }));
+                  }
+                }}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+              />
+              <label htmlFor="agree-legal" className="text-sm text-gray-700 leading-snug">
+                I agree to FurSure&apos;s{' '}
+                <button
+                  type="button"
+                  className="text-purple-600 font-medium hover:underline"
+                  onClick={() => setLegalModal('terms')}
+                >
+                  Terms &amp; Conditions
+                </button>{' '}
+                and{' '}
+                <button
+                  type="button"
+                  className="text-purple-600 font-medium hover:underline"
+                  onClick={() => setLegalModal('privacy')}
+                >
+                  Privacy Policy
+                </button>
+                .
+              </label>
+            </div>
+            {errors.agreedToLegal && <p className="text-sm text-red-600">{errors.agreedToLegal}</p>}
+
             {/* Register Button */}
             <div className="flex justify-end">
               <button
@@ -377,6 +434,12 @@ export function SignupPage() {
           </div>
         </div>
       </div>
+
+      <LegalDocumentModal
+        isOpen={legalModal !== null}
+        onClose={() => setLegalModal(null)}
+        document={legalModal}
+      />
     </div>
   );
 }

@@ -126,6 +126,8 @@ const applicationTables = {
       v.literal("clinicStaff")
     ),
     staffId: v.optional(v.id("staff")), // Link to staff table if applicable
+    /** Unix ms when owner accepted Terms & Privacy at registration */
+    termsAcceptedAt: v.optional(v.number()),
   })
     .index("by_username", ["username"])
     .index("by_email", ["email"]),

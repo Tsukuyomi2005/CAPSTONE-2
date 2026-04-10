@@ -12,6 +12,7 @@ export const registerOwner = mutation({
     lastName: v.string(),
     phone: v.string(),
     address: v.string(),
+    termsAcceptedAt: v.number(),
   },
   handler: async (ctx, args) => {
     // Check if username already exists
@@ -43,6 +44,7 @@ export const registerOwner = mutation({
       phone: args.phone,
       address: args.address,
       role: "owner",
+      termsAcceptedAt: args.termsAcceptedAt,
     });
 
     // TODO: Store password hash (in production, use proper password hashing)

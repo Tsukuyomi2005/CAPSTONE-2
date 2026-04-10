@@ -1,6 +1,26 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+const SERVICE_NAME_MIN = 5;
+const SERVICE_NAME_MAX = 50;
+const SERVICE_DESC_MIN = 25;
+const SERVICE_DESC_MAX = 200;
+
+function assertServiceNameAndDescription(name: string, description: string) {
+  const n = name.trim();
+  const d = description.trim();
+  if (n.length < SERVICE_NAME_MIN || n.length > SERVICE_NAME_MAX) {
+    throw new Error(
+      `Service name must be between ${SERVICE_NAME_MIN} and ${SERVICE_NAME_MAX} characters.`
+    );
+  }
+  if (d.length < SERVICE_DESC_MIN || d.length > SERVICE_DESC_MAX) {
+    throw new Error(
+      `Description must be between ${SERVICE_DESC_MIN} and ${SERVICE_DESC_MAX} characters.`
+    );
+  }
+}
+
 /**
  * Query all services
  */
@@ -33,7 +53,14 @@ export const add = mutation({
   },
   returns: v.id("services"),
   handler: async (ctx, args) => {
-    return await ctx.db.insert("services", args);
+    const name = args.name.trim();
+    const description = args.description.trim();
+    assertServiceNameAndDescription(name, description);
+    return await ctx.db.insert("services", {
+      ...args,
+      name,
+      description,
+    });
   },
 });
 
@@ -55,6 +82,16 @@ export const update = mutation({
     if (!service) {
       throw new Error("Service not found");
     }
+    const nextName = updates.name !== undefined ? updates.name.trim() : service.name;
+    const nextDesc =
+      updates.description !== undefined ? updates.description.trim() : service.description;
+    if (updates.name !== undefined) {
+      updates.name = updates.name.trim();
+    }
+    if (updates.description !== undefined) {
+      updates.description = updates.description.trim();
+    }
+    assertServiceNameAndDescription(nextName, nextDesc);
     await ctx.db.patch(id, updates);
     return null;
   },
