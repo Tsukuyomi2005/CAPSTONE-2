@@ -233,18 +233,18 @@ interface UsageHistoryPanelData {
   peakTrend: UsageTrend;
   periodTrend: UsageTrend;
   avgPerWeek: number;
+  aduForRange: number;
+  aduLabel: string;
   projectedStockout: Date | null;
 }
 
 function StaffAduExpandedUsagePanel({
   itemName,
-  averageDailyUse,
   data,
   usageHistoryRange,
   onRangeChange,
 }: {
   itemName: string;
-  averageDailyUse: number;
   data: UsageHistoryPanelData;
   usageHistoryRange: UsageHistoryRange;
   onRangeChange: (r: UsageHistoryRange) => void;
@@ -300,8 +300,8 @@ function StaffAduExpandedUsagePanel({
           </p>
         </div>
         <div className={`rounded-lg border p-3 ${trendSoftBgClass('stable')} col-span-2 sm:col-span-1`}>
-          <p className="text-gray-500 text-xs">ADU (all time)</p>
-          <p className="font-semibold text-gray-900 tabular-nums">{averageDailyUse.toFixed(2)} / day</p>
+          <p className="text-gray-500 text-xs">{data.aduLabel}</p>
+          <p className="font-semibold text-gray-900 tabular-nums">{data.aduForRange.toFixed(2)} / day</p>
         </div>
       </div>
       <div className="pt-2">
@@ -544,16 +544,9 @@ export function StaffInventory() {
 
     // Create ADU data for ALL inventory items
     const aduItems: ADUItem[] = items.map(item => {
-      const usageData = itemUsageMap.get(item.name);
-      let averageDailyUse = 0;
-
-      if (usageData) {
-        const uniqueDays = usageData.dates.size;
-        // Calculate average daily use
-        averageDailyUse = uniqueDays > 0 ? usageData.totalQuantity / uniqueDays : 0;
-      }
-
       const unitsConsumed30 = sumConfirmedUsageInRange(appointments, item.name, last30Start, today);
+      // Top ADU table uses a fixed rolling 30-day window.
+      const averageDailyUse = unitsConsumed30 / 30;
       const prev30Units = sumConfirmedUsageInRange(appointments, item.name, prev30Start, prev30End);
       const trend = computeUsageTrend(unitsConsumed30, prev30Units);
       const trendDelta30 = unitsConsumed30 - prev30Units;
@@ -679,14 +672,20 @@ export function StaffInventory() {
       peakTrend = computeBarTrend(unitsWithBuckets[peakIdx - 1].units, peak.units);
     }
     const { start: periodStart, end: periodEnd } = getUsageHistoryPeriodBounds(usageHistoryRange);
-    const daysInPeriod =
+      const daysInPeriod =
       Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const aduForRange = daysInPeriod > 0 ? total / daysInPeriod : 0;
+    const aduLabel =
+      usageHistoryRange === '30d'
+        ? 'ADU (last 30 days)'
+        : usageHistoryRange === '90d'
+          ? 'ADU (last 90 days)'
+          : 'ADU (last 6 months)';
     const avgPerWeek = daysInPeriod > 0 ? total / (daysInPeriod / 7) : 0;
-    const adu = expandedAduRow.averageDailyUse;
     const stock = expandedInventoryItem.stock;
     let projectedStockout: Date | null = null;
-    if (adu > 0 && stock > 0) {
-      projectedStockout = addDays(startOfDay(new Date()), Math.ceil(stock / adu));
+    if (aduForRange > 0 && stock > 0) {
+      projectedStockout = addDays(startOfDay(new Date()), Math.ceil(stock / aduForRange));
     }
     const half = Math.max(1, Math.floor(unitsWithBuckets.length / 2));
     const firstHalfTotal = unitsWithBuckets.slice(0, half).reduce((s, b) => s + b.units, 0);
@@ -701,6 +700,8 @@ export function StaffInventory() {
       peakTrend,
       periodTrend,
       avgPerWeek,
+      aduForRange,
+      aduLabel,
       projectedStockout,
     };
   }, [expandedInventoryItem, expandedAduRow, usageHistoryRange, appointments]);
@@ -1682,7 +1683,7 @@ export function StaffInventory() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-10" aria-hidden />
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item Name</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Average Daily Use</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Average Daily Use (30 Days)</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Units consumed</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Days of stock</th>
                       <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">Usage (30 days)</th>
@@ -1791,7 +1792,6 @@ export function StaffInventory() {
                               <td colSpan={8} className="px-6 py-6 border-t border-gray-200">
                                 <StaffAduExpandedUsagePanel
                                   itemName={expandedInventoryItem.name}
-                                  averageDailyUse={expandedAduRow.averageDailyUse}
                                   data={usageHistoryPanel}
                                   usageHistoryRange={usageHistoryRange}
                                   onRangeChange={setUsageHistoryRange}
@@ -1857,7 +1857,7 @@ export function StaffInventory() {
                                 <p className="font-medium">{item.category || 'N/A'}</p>
                               </div>
                               <div>
-                                <span className="text-gray-500">Avg daily use</span>
+                                <span className="text-gray-500">Avg daily use (30 Days)</span>
                                 <p className="font-medium tabular-nums">{item.averageDailyUse.toFixed(2)}</p>
                               </div>
                               <div>
@@ -1910,7 +1910,6 @@ export function StaffInventory() {
                         <div className="rounded-lg border border-gray-200 bg-[#faf8f5] p-4">
                           <StaffAduExpandedUsagePanel
                             itemName={expandedInventoryItem.name}
-                            averageDailyUse={expandedAduRow.averageDailyUse}
                             data={usageHistoryPanel}
                             usageHistoryRange={usageHistoryRange}
                             onRangeChange={setUsageHistoryRange}
