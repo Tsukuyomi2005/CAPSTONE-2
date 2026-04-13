@@ -132,13 +132,13 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
         // Also update in localStorage
         try {
           const storedUsers = JSON.parse(localStorage.getItem('fursure_users') || '{}');
-          const userKey = formData.email;
+          const userKey = formData.email.trim().toLowerCase();
           if (storedUsers[userKey]) {
             storedUsers[userKey] = {
               ...storedUsers[userKey],
               firstName: formData.firstName,
               lastName: formData.lastName,
-              email: formData.email,
+              email: userKey,
               phone: formData.phone,
               position: formData.position,
               licenseNumber: formData.position === 'Veterinarian' ? formData.licenseNumber : undefined,
@@ -167,13 +167,15 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
         }
         
         const newStaff = await addStaff(staffData);
-        
+
+        const emailNorm = formData.email.trim().toLowerCase();
+
         // Create user account for the staff member
         try {
           const accountResult = await createStaffAccount({
-            username: formData.email, // Use email as username
-            email: formData.email,
-            password: formData.password, // In production, hash this
+            username: emailNorm,
+            email: emailNorm,
+            password: formData.password,
             firstName: formData.firstName,
             lastName: formData.lastName,
             phone: formData.phone,
@@ -185,9 +187,8 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
           // Store user credentials locally (for demo - in production use proper auth)
           const storedUsers = JSON.parse(localStorage.getItem('fursure_users') || '{}');
           const userData: any = {
-            username: formData.email, // Email is used as username
-            email: formData.email,
-            password: formData.password, // In production, never store plain passwords
+            username: emailNorm,
+            email: emailNorm,
             role: accountResult.role,
             firstName: formData.firstName,
             lastName: formData.lastName,
@@ -201,7 +202,7 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
             userData.licenseNumber = formData.licenseNumber;
           }
           
-          storedUsers[formData.email] = userData;
+          storedUsers[emailNorm] = userData;
           localStorage.setItem('fursure_users', JSON.stringify(storedUsers));
 
           toast.success(`Staff member and account created successfully. Role: ${accountResult.role}`);

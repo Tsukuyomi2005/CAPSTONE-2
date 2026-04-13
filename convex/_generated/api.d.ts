@@ -14,6 +14,7 @@ import type * as availability from "../availability.js";
 import type * as http from "../http.js";
 import type * as inventory from "../inventory.js";
 import type * as notifications from "../notifications.js";
+import type * as passwordUtils from "../passwordUtils.js";
 import type * as petRecords from "../petRecords.js";
 import type * as router from "../router.js";
 import type * as schedules from "../schedules.js";
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   inventory: typeof inventory;
   notifications: typeof notifications;
+  passwordUtils: typeof passwordUtils;
   petRecords: typeof petRecords;
   router: typeof router;
   schedules: typeof schedules;

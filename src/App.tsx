@@ -31,15 +31,55 @@ import { TermsPage } from './pages/TermsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { useRoleStore } from './stores/roleStore';
 import { useEffect } from 'react';
-import { initializeAdminAccount } from './utils/initializeAdmin';
+import { useMutation } from 'convex/react';
+import { api } from '../convex/_generated/api';
+import { removeLocalAccount } from './utils/removeLocalAccount';
 
 function AppRoutes() {
-  const { role, setRole } = useRoleStore();
+  const { role, setRole, clearRole } = useRoleStore();
   const location = useLocation();
+  const ensureDefaultAdmin = useMutation(api.users.ensureDefaultAdmin);
+  const deleteUserByEmail = useMutation(api.users.deleteUserByEmail);
 
   useEffect(() => {
-    // Initialize admin account on app load
-    initializeAdminAccount();
+    const params = new URLSearchParams(location.search);
+    const removeEmail = params.get('removeLocalUser');
+    if (removeEmail) {
+      const email = removeEmail.trim().toLowerCase();
+      let wasCurrentSession = false;
+      try {
+        const cur = JSON.parse(
+          localStorage.getItem('fursure_current_user') || 'null'
+        ) as { email?: string } | null;
+        wasCurrentSession =
+          cur?.email?.trim().toLowerCase() === email;
+      } catch {
+        /* ignore */
+      }
+      removeLocalAccount(email);
+      if (wasCurrentSession) {
+        clearRole();
+      }
+      void deleteUserByEmail({ email }).finally(() => {
+        params.delete('removeLocalUser');
+        const qs = params.toString();
+        window.history.replaceState(
+          {},
+          '',
+          `${location.pathname}${qs ? `?${qs}` : ''}${location.hash || ''}`
+        );
+      });
+    }
+  }, [
+    location.search,
+    location.pathname,
+    location.hash,
+    deleteUserByEmail,
+    clearRole,
+  ]);
+
+  useEffect(() => {
+    void ensureDefaultAdmin();
     
     // Load user role from localStorage if available (from login)
     const currentUserStr = localStorage.getItem('fursure_current_user');
@@ -62,7 +102,7 @@ function AppRoutes() {
     if (roleParam && ['vet', 'staff', 'owner', 'veterinarian', 'clinicStaff'].includes(roleParam)) {
       setRole(roleParam);
     }
-  }, [setRole]);
+  }, [setRole, ensureDefaultAdmin]);
 
   const hasFullAccess = role === 'vet' || role === 'staff';
   const isVeterinarian = role === 'veterinarian';

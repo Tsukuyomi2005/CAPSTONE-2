@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowLeft, Heart } from 'lucide-react';
+import { useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useRoleStore } from '../stores/roleStore';
 import { toast } from 'sonner';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const { setRole } = useRoleStore();
+  const loginWithEmailPassword = useMutation(api.users.loginWithEmailPassword);
+  const setPasswordIfMissing = useMutation(api.users.setPasswordIfMissing);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [formData, setFormData] = useState({
@@ -36,24 +40,76 @@ export function LoginPage() {
 
     setIsSubmitting(true);
 
+    const emailKey = formData.email.trim().toLowerCase();
+
     try {
-      // For now, we'll use a client-side approach with localStorage
-      // In production, integrate with Convex Auth properly
+      const serverUser = await loginWithEmailPassword({
+        email: emailKey,
+        password: formData.password,
+      });
+
+      if (serverUser) {
+        setRole(serverUser.role);
+        localStorage.setItem(
+          'fursure_current_user',
+          JSON.stringify({
+            username: serverUser.username,
+            email: serverUser.email,
+            role: serverUser.role,
+            ...(serverUser.termsAcceptedAt != null
+              ? { termsAcceptedAt: serverUser.termsAcceptedAt }
+              : {}),
+          })
+        );
+        const storedUsers = JSON.parse(
+          localStorage.getItem('fursure_users') || '{}'
+        );
+        const prev = storedUsers[emailKey] || {};
+        const { password: _removed, ...rest } = prev;
+        storedUsers[emailKey] = {
+          ...rest,
+          username: serverUser.username,
+          email: serverUser.email,
+          role: serverUser.role,
+          firstName: serverUser.firstName,
+          lastName: serverUser.lastName,
+          phone: serverUser.phone,
+          address: serverUser.address,
+          ...(serverUser.termsAcceptedAt != null
+            ? { termsAcceptedAt: serverUser.termsAcceptedAt }
+            : {}),
+        };
+        localStorage.setItem('fursure_users', JSON.stringify(storedUsers));
+        toast.success('Login successful');
+        navigate('/dashboard');
+        return;
+      }
+
+      // Legacy: localStorage-only accounts (older demos / offline Convex)
       const storedUsers = JSON.parse(localStorage.getItem('fursure_users') || '{}');
-      const emailKey = formData.email.trim().toLowerCase();
-      // Prefer normalized key but fall back to raw email for older stored data
       const user = storedUsers[emailKey] || storedUsers[formData.email];
 
       if (user && user.password === formData.password) {
-        // Set role based on user account
+        try {
+          await setPasswordIfMissing({
+            email: emailKey,
+            password: formData.password,
+          });
+        } catch {
+          // Convex unavailable or user not in DB — still allow local session
+        }
         setRole(user.role);
-        // Store current user in session (include email for filtering)
-        localStorage.setItem('fursure_current_user', JSON.stringify({
-          username: user.username || user.email, // Email is used as username
-          email: user.email, // Store email explicitly for filtering
-          role: user.role,
-          ...(user.termsAcceptedAt != null ? { termsAcceptedAt: user.termsAcceptedAt } : {}),
-        }));
+        localStorage.setItem(
+          'fursure_current_user',
+          JSON.stringify({
+            username: user.username || user.email,
+            email: user.email,
+            role: user.role,
+            ...(user.termsAcceptedAt != null
+              ? { termsAcceptedAt: user.termsAcceptedAt }
+              : {}),
+          })
+        );
         toast.success('Login successful');
         navigate('/dashboard');
       } else {

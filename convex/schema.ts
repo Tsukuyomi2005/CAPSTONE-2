@@ -128,6 +128,8 @@ const applicationTables = {
     staffId: v.optional(v.id("staff")), // Link to staff table if applicable
     /** Unix ms when owner accepted Terms & Privacy at registration */
     termsAcceptedAt: v.optional(v.number()),
+    /** PBKDF2-SHA256 hash (see passwordUtils) — never store plain passwords */
+    passwordHash: v.optional(v.string()),
   })
     .index("by_username", ["username"])
     .index("by_email", ["email"]),

@@ -100,38 +100,39 @@ export function SignupPage() {
     const termsAcceptedAt = Date.now();
 
     try {
-      // Register user in Convex (use email as username)
-      try {
-        const normalizedEmail = formData.email.trim().toLowerCase();
-        await registerOwner({
-          username: normalizedEmail, // Use normalized email as username for login
-          email: normalizedEmail,
-          password: formData.password, // In production, hash this
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          phone: formData.phone,
-          address: formData.address,
-          termsAcceptedAt,
-        });
-      } catch (convexError: any) {
-        // If Convex registration fails, continue with localStorage only
-        console.warn('Convex registration failed, using localStorage only:', convexError);
+      if (!import.meta.env.VITE_CONVEX_URL) {
+        toast.error(
+          'Server is not configured (missing VITE_CONVEX_URL). Add it to .env.local and restart the dev server.'
+        );
+        return;
       }
 
-      // Store user credentials locally (for demo - in production use proper auth)
+      const normalizedEmail = formData.email.trim().toLowerCase();
+
+      await registerOwner({
+        username: normalizedEmail,
+        email: normalizedEmail,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        address: formData.address,
+        termsAcceptedAt,
+      });
+
       const storedUsers = JSON.parse(localStorage.getItem('fursure_users') || '{}');
-      const emailKey = formData.email.trim().toLowerCase();
-      storedUsers[emailKey] = {
-        username: emailKey, // Normalized email is used as username
+      const emailKey = normalizedEmail;
+      const profileBase = {
+        username: emailKey,
         email: emailKey,
-        password: formData.password, // In production, never store plain passwords
-        role: 'owner',
+        role: 'owner' as const,
         firstName: formData.firstName,
         lastName: formData.lastName,
         phone: formData.phone,
         address: formData.address,
         termsAcceptedAt,
       };
+      storedUsers[emailKey] = profileBase;
       localStorage.setItem('fursure_users', JSON.stringify(storedUsers));
 
       // Set role and store current user (include email for filtering)
@@ -145,8 +146,11 @@ export function SignupPage() {
 
       toast.success('Registration successful! Welcome to Jocari Pet Clinic and Grooming Salon');
       navigate('/dashboard');
-    } catch (error: any) {
-      const errorMessage = error?.message || 'Registration failed. Please try again.';
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Registration failed. Please try again.';
       toast.error(errorMessage);
       setErrors({ submit: errorMessage });
     } finally {

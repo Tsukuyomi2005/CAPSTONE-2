@@ -1,13 +1,17 @@
-// @ts-nocheck - Type definitions will be available after npm install
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { hashPassword, verifyPassword } from "./passwordUtils";
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
 
 // Register a new pet owner account
 export const registerOwner = mutation({
   args: {
     username: v.string(),
     email: v.string(),
-    password: v.string(), // In production, this should be hashed
+    password: v.string(),
     firstName: v.string(),
     lastName: v.string(),
     phone: v.string(),
@@ -15,42 +19,42 @@ export const registerOwner = mutation({
     termsAcceptedAt: v.number(),
   },
   handler: async (ctx, args) => {
-    // Check if username already exists
+    const username = normalizeEmail(args.username);
+    const email = normalizeEmail(args.email);
+
     const existingUser = await ctx.db
       .query("users")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_username", (q) => q.eq("username", username))
       .first();
-    
+
     if (existingUser) {
       throw new Error("Username already exists");
     }
 
-    // Check if email already exists
     const existingEmail = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    
+
     if (existingEmail) {
       throw new Error("Email already exists");
     }
 
-    // Create user account with owner role
+    const passwordHash = await hashPassword(args.password);
+
     const userId = await ctx.db.insert("users", {
-      username: args.username,
-      email: args.email,
+      username,
+      email,
       firstName: args.firstName,
       lastName: args.lastName,
       phone: args.phone,
       address: args.address,
       role: "owner",
       termsAcceptedAt: args.termsAcceptedAt,
+      passwordHash,
     });
 
-    // TODO: Store password hash (in production, use proper password hashing)
-    // For now, we'll store it in a separate table or use Convex Auth
-    
-    return { userId, role: "owner" };
+    return { userId, role: "owner" as const };
   },
 });
 
@@ -68,73 +72,151 @@ export const createStaffAccount = mutation({
     staffId: v.optional(v.id("staff")),
   },
   handler: async (ctx, args) => {
-    // Check if username already exists
+    const username = normalizeEmail(args.username);
+    const email = normalizeEmail(args.email);
+
     const existingUser = await ctx.db
       .query("users")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_username", (q) => q.eq("username", username))
       .first();
-    
+
     if (existingUser) {
       throw new Error("Username already exists");
     }
 
-    // Check if email already exists
     const existingEmail = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    
+
     if (existingEmail) {
       throw new Error("Email already exists");
     }
 
-    // Determine role based on position
-    const role = args.position === "Veterinarian" ? "veterinarian" : "clinicStaff";
+    const role =
+      args.position === "Veterinarian" ? "veterinarian" : "clinicStaff";
 
-    // Create user account
+    const passwordHash = await hashPassword(args.password);
+
     const userId = await ctx.db.insert("users", {
-      username: args.username,
-      email: args.email,
+      username,
+      email,
       firstName: args.firstName,
       lastName: args.lastName,
       phone: args.phone,
-      role: role,
+      role,
       staffId: args.staffId,
-      // Note: licenseNumber can be stored in a separate table or added to users schema if needed
+      passwordHash,
     });
 
-    // TODO: Store password hash (in production, use proper password hashing)
-    
     return { userId, role };
   },
 });
 
-// Authenticate user and return role
-export const authenticateUser = query({
+/** Validates email/password against stored bcrypt hash. */
+export const loginWithEmailPassword = mutation({
   args: {
-    username: v.string(),
+    email: v.string(),
     password: v.string(),
   },
   handler: async (ctx, args) => {
-    // Find user by username
+    const email = normalizeEmail(args.email);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
 
-    if (!user) {
+    if (!user?.passwordHash) {
       return null;
     }
 
-    // TODO: Verify password hash (in production, use proper password verification)
-    // For now, we'll use a simple check - in production, integrate with Convex Auth
-    
+    const ok = await verifyPassword(args.password, user.passwordHash);
+    if (!ok) {
+      return null;
+    }
+
     return {
       userId: user._id,
       role: user.role,
       username: user.username,
       email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      phone: user.phone,
+      address: user.address,
+      termsAcceptedAt: user.termsAcceptedAt,
+      staffId: user.staffId,
     };
+  },
+});
+
+/**
+ * After a successful legacy (localStorage) login, backfill passwordHash on the
+ * server so the same account can sign in from other browsers.
+ */
+export const setPasswordIfMissing = mutation({
+  args: {
+    email: v.string(),
+    password: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const email = normalizeEmail(args.email);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .first();
+
+    if (!user) {
+      return { updated: false };
+    }
+    // Only skip if already using our PBKDF2 format (replaces legacy bcrypt hashes)
+    if (user.passwordHash?.startsWith("pbkdf2-sha256$")) {
+      return { updated: false };
+    }
+
+    await ctx.db.patch(user._id, {
+      passwordHash: await hashPassword(args.password),
+    });
+    return { updated: true };
+  },
+});
+
+/** Ensures the default panel admin exists in Convex (idempotent). */
+export const ensureDefaultAdmin = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const adminEmail = "admin_test@gmail.com";
+    const adminPassword = "AdminTest";
+
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", adminEmail))
+      .first();
+
+    const hash = await hashPassword(adminPassword);
+
+    if (existing) {
+      const needsNewHash =
+        !existing.passwordHash ||
+        !existing.passwordHash.startsWith("pbkdf2-sha256$");
+      if (needsNewHash) {
+        await ctx.db.patch(existing._id, { passwordHash: hash });
+      }
+      return { created: false as const };
+    }
+
+    await ctx.db.insert("users", {
+      username: adminEmail,
+      email: adminEmail,
+      firstName: "Admin",
+      lastName: "User",
+      phone: "",
+      address: "",
+      role: "vet",
+      passwordHash: hash,
+    });
+
+    return { created: true as const };
   },
 });
 
@@ -156,7 +238,9 @@ export const getUserByUsername = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("users")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_username", (q) =>
+        q.eq("username", normalizeEmail(args.username))
+      )
       .first();
   },
 });
@@ -173,40 +257,57 @@ export const createAdminAccount = mutation({
     address: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Check if username already exists
+    const username = normalizeEmail(args.username);
+    const email = normalizeEmail(args.email);
+
     const existingUser = await ctx.db
       .query("users")
-      .withIndex("by_username", (q) => q.eq("username", args.username))
+      .withIndex("by_username", (q) => q.eq("username", username))
       .first();
-    
+
     if (existingUser) {
       throw new Error("Username already exists");
     }
 
-    // Check if email already exists
     const existingEmail = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    
+
     if (existingEmail) {
       throw new Error("Email already exists");
     }
 
-    // Create admin account with 'vet' role (admin POV)
+    const passwordHash = await hashPassword(args.password);
+
     const userId = await ctx.db.insert("users", {
-      username: args.username,
-      email: args.email,
+      username,
+      email,
       firstName: args.firstName,
       lastName: args.lastName,
       phone: args.phone || "",
       address: args.address || "",
-      role: "vet", // 'vet' is the admin role
+      role: "vet",
+      passwordHash,
     });
 
-    // TODO: Store password hash (in production, use proper password hashing)
-    
-    return { userId, role: "vet" };
+    return { userId, role: "vet" as const };
   },
 });
 
+/** Remove a user by email (e.g. cleanup). */
+export const deleteUserByEmail = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const email = normalizeEmail(args.email);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .first();
+    if (!user) {
+      return { deleted: false as const };
+    }
+    await ctx.db.delete(user._id);
+    return { deleted: true as const };
+  },
+});
