@@ -52,6 +52,18 @@ export interface Appointment {
   ownerCancellationReasonDetail?: string;
 }
 
+export interface PetAllergyEntry {
+  name: string;
+  /** ISO date string YYYY-MM-DD */
+  addedAt: string;
+}
+
+export interface PetRecentIllnessEntry {
+  name: string;
+  /** ISO date string YYYY-MM-DD */
+  date: string;
+}
+
 export interface PetRecord {
   id: string;
   petType?: 'dog' | 'cat';
@@ -61,9 +73,11 @@ export interface PetRecord {
   weight: number;
   gender: 'male' | 'female';
   color: string;
+  /** @deprecated use recentIllnesses */
   recentIllness?: string;
+  recentIllnesses?: PetRecentIllnessEntry[];
   vaccinations?: { name: string; date: string }[];
-  allergies?: string[];
+  allergies?: PetAllergyEntry[];
   notes?: string;
 }
 

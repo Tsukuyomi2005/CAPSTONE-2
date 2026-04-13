@@ -41,7 +41,7 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
         lastName,
         position: staff.position,
         licenseNumber: staff.licenseNumber || '', // Load license number from staff record
-        phone: staff.phone,
+        phone: staff.phone.replace(/\D/g, '').slice(0, 11),
         email: staff.email,
         password: '', // Password not shown when editing
         confirmPassword: '',
@@ -62,6 +62,12 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
     setShowPassword(false);
   }, [staff, isOpen]);
 
+  const handlePhoneChange = (value: string) => {
+    const digitsOnly = value.replace(/\D/g, '').slice(0, 11);
+    setFormData((prev) => ({ ...prev, phone: digitsOnly }));
+    setErrors((prev) => (prev.phone ? { ...prev, phone: '' } : prev));
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -71,8 +77,11 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
     if (!formData.lastName.trim()) {
       newErrors.lastName = 'Last name is required';
     }
-    if (!formData.phone.trim()) {
+    if (!formData.phone) {
       newErrors.phone = 'Phone number is required';
+    } else if (!/^09\d{9}$/.test(formData.phone)) {
+      newErrors.phone =
+        'Enter exactly 11 digits starting with 09 (e.g. 09123456789)';
     }
     // License number required only for Veterinarian
     if (formData.position === 'Veterinarian' && !formData.licenseNumber.trim()) {
@@ -301,13 +310,21 @@ export function StaffModal({ isOpen, onClose, staff }: StaffModalProps) {
                 </label>
                 <input
                   type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  maxLength={11}
                   value={formData.phone}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    handlePhoneChange(e.target.value)
+                  }
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.phone ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder="Enter phone number"
+                  placeholder="09123456789"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  11 digits only, must start with 09
+                </p>
                 {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
               </div>
             </div>

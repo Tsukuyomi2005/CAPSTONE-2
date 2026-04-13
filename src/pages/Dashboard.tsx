@@ -426,9 +426,11 @@ export function Dashboard() {
                   >
                     <h4 className="font-medium text-purple-900 mb-1">{record.petName}</h4>
                     <p className="text-xs text-purple-800">
-                      {record.recentIllness
-                        ? `Recent concern: ${record.recentIllness}`
-                        : 'No recent illness recorded'}
+                      {record.recentIllnesses?.length
+                        ? `Recent: ${record.recentIllnesses.map((i) => i.name).join(', ')}`
+                        : record.recentIllness
+                          ? `Recent concern: ${record.recentIllness}`
+                          : 'No recent illness recorded'}
                     </p>
                   </div>
                 ))
@@ -602,7 +604,11 @@ export function Dashboard() {
                   <div key={record.id} className="p-3 bg-purple-50 rounded-lg">
                     <h4 className="font-medium text-purple-900 mb-1">{record.petName}</h4>
                     <p className="text-sm text-purple-800">
-                      {record.recentIllness ? `Recent: ${record.recentIllness}` : 'No recent illness recorded'}
+                      {record.recentIllnesses?.length
+                        ? `Recent: ${record.recentIllnesses.map((i) => i.name).join(', ')}`
+                        : record.recentIllness
+                          ? `Recent: ${record.recentIllness}`
+                          : 'No recent illness recorded'}
                     </p>
                   </div>
                 ))

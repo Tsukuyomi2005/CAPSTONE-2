@@ -157,13 +157,32 @@ const applicationTables = {
     weight: v.number(),
     gender: v.union(v.literal("male"), v.literal("female")),
     color: v.string(),
+    /** @deprecated prefer recentIllnesses */
     recentIllness: v.optional(v.string()),
+    recentIllnesses: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          date: v.string(),
+        })
+      )
+    ),
     notes: v.optional(v.string()),
     vaccinations: v.optional(v.array(v.object({
       name: v.string(),
       date: v.string(),
     }))),
-    allergies: v.optional(v.array(v.string())),
+    allergies: v.optional(
+      v.array(
+        v.union(
+          v.string(),
+          v.object({
+            name: v.string(),
+            addedAt: v.string(),
+          })
+        )
+      )
+    ),
   })
     .index("by_owner_email", ["ownerEmail"]),
 };

@@ -2,11 +2,14 @@ import { useQuery, useMutation } from "convex/react";
 // @ts-ignore - API types will be generated when Convex syncs
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { PetRecord } from '../types';
+import type {
+  PetRecord,
+  PetAllergyEntry,
+  PetRecentIllnessEntry,
+} from '../types';
 import { useRoleStore } from './roleStore';
 
-// Helper function to convert Convex document to frontend type
-function convertPetRecord(doc: {
+type ConvexPetDoc = {
   _id: Id<"petRecords">;
   _creationTime: number;
   ownerEmail: string;
@@ -18,10 +21,39 @@ function convertPetRecord(doc: {
   gender: 'male' | 'female';
   color: string;
   recentIllness?: string;
+  recentIllnesses?: PetRecentIllnessEntry[];
   notes?: string;
   vaccinations?: Array<{ name: string; date: string }>;
-  allergies?: string[];
-}): PetRecord {
+  allergies?: Array<string | PetAllergyEntry>;
+};
+
+function normalizeAllergies(
+  raw: ConvexPetDoc['allergies']
+): PetAllergyEntry[] {
+  if (!raw?.length) return [];
+  return raw.map((a) =>
+    typeof a === 'string'
+      ? { name: a, addedAt: new Date().toISOString().slice(0, 10) }
+      : { name: a.name, addedAt: a.addedAt }
+  );
+}
+
+function normalizeRecentIllnesses(doc: ConvexPetDoc): PetRecentIllnessEntry[] {
+  if (doc.recentIllnesses?.length) return doc.recentIllnesses;
+  if (doc.recentIllness?.trim()) {
+    return [
+      {
+        name: doc.recentIllness.trim(),
+        date: new Date().toISOString().slice(0, 10),
+      },
+    ];
+  }
+  return [];
+}
+
+function convertPetRecord(doc: ConvexPetDoc): PetRecord {
+  const recentIllnesses = normalizeRecentIllnesses(doc);
+  const allergies = normalizeAllergies(doc.allergies);
   return {
     id: doc._id,
     petType: doc.petType,
@@ -32,22 +64,21 @@ function convertPetRecord(doc: {
     gender: doc.gender,
     color: doc.color,
     recentIllness: doc.recentIllness,
+    recentIllnesses,
     notes: doc.notes,
     vaccinations: doc.vaccinations,
-    allergies: doc.allergies,
+    allergies,
   };
 }
 
 export function usePetRecordsStore() {
   const { role } = useRoleStore();
   
-  // Get current user email from localStorage
   const getCurrentUserEmail = (): string | undefined => {
     try {
       const currentUserStr = localStorage.getItem('fursure_current_user');
       if (currentUserStr) {
         const currentUser = JSON.parse(currentUserStr);
-        // Get email from stored users
         const storedUsers = JSON.parse(localStorage.getItem('fursure_users') || '{}');
         const userData = storedUsers[currentUser.username || currentUser.email];
         return userData?.email || currentUser.email || currentUser.username;
@@ -60,16 +91,13 @@ export function usePetRecordsStore() {
 
   const currentUserEmail = getCurrentUserEmail();
   
-  // Build query arguments - handle undefined role gracefully
   const queryArgs = (() => {
     if (!role) {
-      // If no role, return empty args (will get all records - should only happen during initial load)
       return {};
     }
     if (role === 'owner' && currentUserEmail) {
       return { userEmail: currentUserEmail, userRole: role };
     }
-    // For staff/vet/admin, pass role but no email filter
     return { userRole: role };
   })();
   
@@ -85,7 +113,6 @@ export function usePetRecordsStore() {
   const records: PetRecord[] = petRecordsData?.map(convertPetRecord) ?? [];
 
   const addRecord = async (record: Omit<PetRecord, 'id'>) => {
-    // Get owner email - required for filtering
     const ownerEmail = currentUserEmail || getCurrentUserEmail();
     if (!ownerEmail) {
       throw new Error("User email not found. Please log in again.");
@@ -100,7 +127,8 @@ export function usePetRecordsStore() {
       weight: record.weight,
       gender: record.gender,
       color: record.color,
-      recentIllness: record.recentIllness,
+      recentIllness: undefined,
+      recentIllnesses: record.recentIllnesses,
       notes: record.notes,
       vaccinations: record.vaccinations,
       allergies: record.allergies,
@@ -118,9 +146,10 @@ export function usePetRecordsStore() {
       gender?: 'male' | 'female';
       color?: string;
       recentIllness?: string;
+      recentIllnesses?: PetRecentIllnessEntry[];
       notes?: string;
       vaccinations?: Array<{ name: string; date: string }>;
-      allergies?: string[];
+      allergies?: PetAllergyEntry[];
     } = {
       id: id as Id<"petRecords">,
     };
@@ -133,6 +162,7 @@ export function usePetRecordsStore() {
     if (updates.gender !== undefined) updateData.gender = updates.gender;
     if (updates.color !== undefined) updateData.color = updates.color;
     if (updates.recentIllness !== undefined) updateData.recentIllness = updates.recentIllness;
+    if (updates.recentIllnesses !== undefined) updateData.recentIllnesses = updates.recentIllnesses;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
     if (updates.vaccinations !== undefined) updateData.vaccinations = updates.vaccinations;
     if (updates.allergies !== undefined) updateData.allergies = updates.allergies;

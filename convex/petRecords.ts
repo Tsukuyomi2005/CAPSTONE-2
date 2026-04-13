@@ -24,12 +24,22 @@ export const list = query({
       gender: v.union(v.literal("male"), v.literal("female")),
       color: v.string(),
       recentIllness: v.optional(v.string()),
+      recentIllnesses: v.optional(
+        v.array(v.object({ name: v.string(), date: v.string() }))
+      ),
       notes: v.optional(v.string()),
       vaccinations: v.optional(v.array(v.object({
         name: v.string(),
         date: v.string(),
       }))),
-      allergies: v.optional(v.array(v.string())),
+      allergies: v.optional(
+        v.array(
+          v.union(
+            v.string(),
+            v.object({ name: v.string(), addedAt: v.string() })
+          )
+        )
+      ),
     })
   ),
   handler: async (ctx, args) => {
@@ -60,12 +70,22 @@ export const add = mutation({
     gender: v.union(v.literal("male"), v.literal("female")),
     color: v.string(),
     recentIllness: v.optional(v.string()),
+    recentIllnesses: v.optional(
+      v.array(v.object({ name: v.string(), date: v.string() }))
+    ),
     notes: v.optional(v.string()),
     vaccinations: v.optional(v.array(v.object({
       name: v.string(),
       date: v.string(),
     }))),
-    allergies: v.optional(v.array(v.string())),
+    allergies: v.optional(
+      v.array(
+        v.union(
+          v.string(),
+          v.object({ name: v.string(), addedAt: v.string() })
+        )
+      )
+    ),
   },
   returns: v.id("petRecords"),
   handler: async (ctx, args) => {
@@ -79,6 +99,7 @@ export const add = mutation({
       gender: args.gender,
       color: args.color,
       recentIllness: args.recentIllness,
+      recentIllnesses: args.recentIllnesses,
       notes: args.notes,
       vaccinations: args.vaccinations,
       allergies: args.allergies,
@@ -100,12 +121,22 @@ export const update = mutation({
     gender: v.optional(v.union(v.literal("male"), v.literal("female"))),
     color: v.optional(v.string()),
     recentIllness: v.optional(v.string()),
+    recentIllnesses: v.optional(
+      v.array(v.object({ name: v.string(), date: v.string() }))
+    ),
     notes: v.optional(v.string()),
     vaccinations: v.optional(v.array(v.object({
       name: v.string(),
       date: v.string(),
     }))),
-    allergies: v.optional(v.array(v.string())),
+    allergies: v.optional(
+      v.array(
+        v.union(
+          v.string(),
+          v.object({ name: v.string(), addedAt: v.string() })
+        )
+      )
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

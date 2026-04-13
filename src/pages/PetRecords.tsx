@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit, Trash2, Heart, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, Heart, X } from 'lucide-react';
 import { usePetRecordsStore } from '../stores/petRecordsStore';
 import { PetRecordModal } from '../components/PetRecordModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -28,6 +28,7 @@ export function PetRecords() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<PetRecord | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<PetRecord | null>(null);
 
   const handleEdit = (record: PetRecord) => {
     setEditingRecord(record);
@@ -68,7 +69,19 @@ export function PetRecords() {
       {/* Pet Records Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {records.map((record) => (
-          <div key={record.id} className="bg-white rounded-lg p-6 shadow-sm border">
+          <div
+            key={record.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => setSelectedRecord(record)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setSelectedRecord(record);
+              }
+            }}
+            className="w-full h-[470px] rounded-lg p-6 text-left transition-all cursor-pointer border border-[#D8C2AE] bg-[#FFFBF8] shadow-sm hover:shadow-md hover:border-[#A47148]/70 flex flex-col"
+          >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center">
                 {record.petType === 'cat' ? (
@@ -88,22 +101,30 @@ export function PetRecords() {
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleEdit(record)}
-                  className="text-blue-600 hover:text-blue-900"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(record);
+                  }}
+                  className="rounded-md p-1.5 text-blue-600 hover:text-blue-900 hover:bg-blue-50"
+                  aria-label="Edit pet record"
                 >
-                  <Edit className="h-4 w-4" />
+                  <Edit className="h-5 w-5" />
                 </button>
                 <button
-                  onClick={() => setDeleteConfirm(record.id)}
-                  className="text-red-600 hover:text-red-900"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteConfirm(record.id);
+                  }}
+                  className="rounded-md p-1.5 text-red-600 hover:text-red-900 hover:bg-red-50"
+                  aria-label="Delete pet record"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-5 w-5" />
                 </button>
               </div>
             </div>
 
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                 <div>
                   <span className="text-gray-500">Age:</span>
                   <p className="font-medium">{record.age} years</p>
@@ -113,33 +134,58 @@ export function PetRecords() {
                   <p className="font-medium">{record.weight} kg</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Gender:</span>
-                  <p className="font-medium capitalize">{record.gender}</p>
-                </div>
-                <div>
                   <span className="text-gray-500">Color:</span>
                   <p className="font-medium">{record.color}</p>
                 </div>
               </div>
+              <div>
+                <span className="text-gray-500 text-sm">Gender:</span>
+                <p className="font-medium capitalize">{record.gender}</p>
+              </div>
+            </div>
 
-              {record.recentIllness && (
-                <div className="p-3 bg-red-50 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <FileText className="h-4 w-4 text-red-600 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-medium text-red-900">Recent Illness</h4>
-                      <p className="text-sm text-red-800">{record.recentIllness}</p>
+            <div className="my-3 border-t border-[#E8DDD4]" />
+
+            <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+              {!(record.recentIllnesses?.length || record.recentIllness || record.vaccinations?.length || record.allergies?.length) && (
+                <div className="h-full min-h-[170px] flex items-center justify-center">
+                  <p className="text-sm text-gray-500 text-center">No medical history recorded yet.</p>
+                </div>
+              )}
+
+              {(record.recentIllnesses?.length || record.recentIllness) && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-[#3C2A1E]">Recent illnesses</h4>
+                  {record.recentIllnesses?.map((ill, idx) => (
+                    <div
+                      key={`${ill.name}-${idx}`}
+                      className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2"
+                    >
+                      <p className="font-medium text-[#3C2A1E]">{ill.name}</p>
+                      <p className="text-xs text-[#8B6914]">
+                        Diagnosed :{' '}
+                        {new Date(ill.date + 'T12:00:00').toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </p>
                     </div>
-                  </div>
+                  ))}
+                  {!record.recentIllnesses?.length && record.recentIllness && (
+                    <div className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2">
+                      <p className="text-sm text-[#3C2A1E]">{record.recentIllness}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
               {record.vaccinations && record.vaccinations.length > 0 && (
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-green-900 mb-2">Vaccinations</h4>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-[#3C2A1E]">Vaccinations</h4>
                   <div className="space-y-1">
                     {record.vaccinations.map((vaccination, index) => (
-                      <p key={index} className="text-sm text-green-800">
+                      <p key={index} className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2 text-sm text-[#3C2A1E]">
                         {vaccination.name} - {new Date(vaccination.date).toLocaleDateString()}
                       </p>
                     ))}
@@ -148,15 +194,24 @@ export function PetRecords() {
               )}
 
               {record.allergies && record.allergies.length > 0 && (
-                <div className="p-3 bg-yellow-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-yellow-900 mb-2">Allergies</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {record.allergies.map((allergy, index) => (
-                      <span key={index} className="px-2 py-1 bg-yellow-200 text-yellow-800 text-xs rounded-full">
-                        {allergy}
-                      </span>
-                    ))}
-                  </div>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-[#3C2A1E]">Allergies</h4>
+                  {record.allergies.map((allergy, index) => (
+                    <div
+                      key={index}
+                      className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2"
+                    >
+                      <p className="font-medium text-[#3C2A1E]">{allergy.name}</p>
+                      <p className="text-xs text-[#8B6914]">
+                        Added{' '}
+                        {new Date(allergy.addedAt + 'T12:00:00').toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -192,6 +247,85 @@ export function PetRecords() {
         title="Delete Pet Record"
         message="Are you sure you want to delete this pet record? This action cannot be undone."
       />
+
+      {selectedRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/45"
+            onClick={() => setSelectedRecord(null)}
+          />
+          <div className="relative z-10 w-full max-w-xl rounded-xl bg-white shadow-2xl border border-[#E8DDD4]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E8DDD4]">
+              <h3 className="text-lg font-semibold text-[#3C2A1E]">
+                {selectedRecord.petName} Details
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedRecord(null)}
+                className="text-gray-500 hover:text-gray-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-gray-500">Type:</span> <p className="font-medium capitalize">{selectedRecord.petType || 'N/A'}</p></div>
+                <div><span className="text-gray-500">Breed:</span> <p className="font-medium">{selectedRecord.breed}</p></div>
+                <div><span className="text-gray-500">Age:</span> <p className="font-medium">{selectedRecord.age} years</p></div>
+                <div><span className="text-gray-500">Weight:</span> <p className="font-medium">{selectedRecord.weight} kg</p></div>
+                <div><span className="text-gray-500">Gender:</span> <p className="font-medium capitalize">{selectedRecord.gender}</p></div>
+                <div><span className="text-gray-500">Color:</span> <p className="font-medium">{selectedRecord.color}</p></div>
+              </div>
+
+              {!!selectedRecord.recentIllnesses?.length && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-[#3C2A1E]">Recent illnesses</h4>
+                  {selectedRecord.recentIllnesses.map((ill, idx) => (
+                    <div key={`${ill.name}-${idx}`} className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2">
+                      <p className="font-medium text-[#3C2A1E]">{ill.name}</p>
+                      <p className="text-xs text-[#A47148]">
+                        Diagnosed : {new Date(`${ill.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!!selectedRecord.vaccinations?.length && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-[#3C2A1E]">Vaccinations</h4>
+                  {selectedRecord.vaccinations.map((v, idx) => (
+                    <div key={`${v.name}-${idx}`} className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2 text-sm text-[#3C2A1E]">
+                      {v.name} - {new Date(`${v.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!!selectedRecord.allergies?.length && (
+                <div className="space-y-2">
+                  <h4 className="text-sm font-semibold text-[#3C2A1E]">Allergies</h4>
+                  {selectedRecord.allergies.map((a, idx) => (
+                    <div key={`${a.name}-${idx}`} className="rounded-lg border border-[#E8DDD4] border-l-4 border-l-[#A47148] bg-white px-3 py-2">
+                      <p className="font-medium text-[#3C2A1E]">{a.name}</p>
+                      <p className="text-xs text-[#A47148]">
+                        Added {new Date(`${a.addedAt}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedRecord.notes && (
+                <div>
+                  <h4 className="text-sm font-semibold text-[#3C2A1E] mb-1">Additional notes</h4>
+                  <p className="text-sm text-gray-700">{selectedRecord.notes}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
