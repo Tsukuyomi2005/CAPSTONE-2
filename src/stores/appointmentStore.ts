@@ -31,6 +31,9 @@ function convertAppointment(doc: {
     deductionStatus?: 'pending' | 'confirmed' | 'rejected';
     loggedAt?: string;
     rejectedReason?: string;
+    approvedBy?: string;
+    approvedByName?: string;
+    approvedAt?: string;
   }>;
   rescheduleCount?: number;
   rescheduleHistory?: Appointment['rescheduleHistory'];
@@ -164,6 +167,9 @@ export function useAppointmentStore() {
         deductionStatus?: 'pending' | 'confirmed' | 'rejected';
         loggedAt?: string;
         rejectedReason?: string;
+        approvedBy?: string;
+        approvedByName?: string;
+        approvedAt?: string;
       }>;
       ownerCancellationReasonCode?: string;
       ownerCancellationReasonDetail?: string;

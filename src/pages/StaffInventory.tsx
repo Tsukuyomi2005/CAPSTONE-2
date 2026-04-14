@@ -55,6 +55,15 @@ const EquipmentIcon = ({ className }: { className?: string }) => (
   />
 );
 
+const CategoryIcon = ({ category, className }: { category: string; className?: string }) => {
+  if (category === 'Medication') return <MedicationIcon className={className} />;
+  if (category === 'Diagnostic') return <DiagnosticIcon className={className} />;
+  if (category === 'Surgical') return <SurgicalIcon className={className} />;
+  if (category === 'Supplies') return <SuppliesIcon className={className} />;
+  if (category === 'Equipment') return <EquipmentIcon className={className} />;
+  return <Package className={`text-gray-400 ${className || ''}`} />;
+};
+
 type TabType = 'current' | 'pending' | 'adu';
 
 type UsageTrend = 'up' | 'down' | 'stable';
@@ -97,6 +106,16 @@ function parseAppointmentDay(s: string): Date {
   return startOfDay(new Date(s + 'T12:00:00'));
 }
 
+function usageDayForConfirmedItem(approvedAt: string | undefined, appointmentDate: string): Date {
+  if (approvedAt) {
+    const approvedDate = new Date(approvedAt);
+    if (!Number.isNaN(approvedDate.getTime())) {
+      return startOfDay(approvedDate);
+    }
+  }
+  return parseAppointmentDay(appointmentDate);
+}
+
 function sumConfirmedUsageInRange(
   appointments: Appointment[],
   itemName: string,
@@ -109,11 +128,11 @@ function sumConfirmedUsageInRange(
   const endT = endD.getTime();
   let sum = 0;
   for (const apt of appointments) {
-    const t = parseAppointmentDay(apt.date).getTime();
-    if (t < startT || t > endT) continue;
     if (!apt.itemsUsed) continue;
     for (const iu of apt.itemsUsed) {
       if (iu.deductionStatus === 'confirmed' && iu.itemName === itemName) {
+        const usageTime = usageDayForConfirmedItem(iu.approvedAt, apt.date).getTime();
+        if (usageTime < startT || usageTime > endT) continue;
         sum += iu.quantity || 0;
       }
     }
@@ -1359,7 +1378,7 @@ export function StaffInventory() {
                           <div className="text-sm text-gray-900 space-y-1">
                             {deduction.itemsUsed.map((item, idx) => (
                               <div key={idx} className="flex items-center gap-2">
-                                <Package className="h-4 w-4 text-gray-400" />
+                                <CategoryIcon category={item.itemCategory} className="h-4 w-4" />
                                 <span>{item.itemName} ({item.quantity})</span>
                               </div>
                             ))}

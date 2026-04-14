@@ -8,6 +8,56 @@ import type { Appointment, InventoryItem } from '../types';
 
 type ReportPeriod = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'thisQuarter' | 'thisYear';
 
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function addDays(d: Date, n: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+}
+
+function parseAppointmentDay(s: string): Date {
+  return startOfDay(new Date(`${s}T12:00:00`));
+}
+
+function usageDayForConfirmedItem(approvedAt: string | undefined, appointmentDate: string): Date {
+  if (approvedAt) {
+    const approvedDate = new Date(approvedAt);
+    if (!Number.isNaN(approvedDate.getTime())) {
+      return startOfDay(approvedDate);
+    }
+  }
+  return parseAppointmentDay(appointmentDate);
+}
+
+function sumConfirmedUsageInRange(
+  appointments: Appointment[],
+  itemName: string,
+  start: Date,
+  end: Date
+): number {
+  const startT = startOfDay(start).getTime();
+  const endD = startOfDay(end);
+  endD.setHours(23, 59, 59, 999);
+  const endT = endD.getTime();
+  let sum = 0;
+  for (const apt of appointments) {
+    if (!apt.itemsUsed) continue;
+    for (const iu of apt.itemsUsed) {
+      if (iu.deductionStatus === 'confirmed' && iu.itemName === itemName) {
+        const usageTime = usageDayForConfirmedItem(iu.approvedAt, apt.date).getTime();
+        if (usageTime < startT || usageTime > endT) continue;
+        sum += iu.quantity || 0;
+      }
+    }
+  }
+  return sum;
+}
+
 export function Reports() {
   // Fetch appointments directly from Convex database (appointments table)
   // This uses useQuery(api.appointments.list) which queries ctx.db.query("appointments").collect()
@@ -665,31 +715,16 @@ export function Reports() {
               );
             }
 
-            // Calculate Average Daily Use (ADU) for the selected item
-            const itemUsageMap = new Map<string, { totalQuantity: number; dates: Set<string> }>();
-
-            appointments.forEach(appointment => {
-              if (appointment.itemsUsed && appointment.itemsUsed.length > 0) {
-                appointment.itemsUsed.forEach(itemUsed => {
-                  if (itemUsed.deductionStatus === 'confirmed' && itemUsed.itemName === selectedItem.name) {
-                    const quantity = itemUsed.quantity || 0;
-                    const appointmentDate = appointment.date;
-
-                    if (!itemUsageMap.has(selectedItem.name)) {
-                      itemUsageMap.set(selectedItem.name, { totalQuantity: 0, dates: new Set() });
-                    }
-
-                    const itemData = itemUsageMap.get(selectedItem.name)!;
-                    itemData.totalQuantity += quantity;
-                    itemData.dates.add(appointmentDate);
-                  }
-                });
-              }
-            });
-
-            const usageData = itemUsageMap.get(selectedItem.name);
-            const uniqueDays = usageData ? usageData.dates.size : 0;
-            const averageDailyUse = uniqueDays > 0 ? usageData!.totalQuantity / uniqueDays : 0;
+            // Match Inventory ADU formula: fixed rolling 30-day confirmed usage / 30
+            const today = startOfDay(new Date());
+            const last30Start = addDays(today, -29);
+            const unitsConsumed30 = sumConfirmedUsageInRange(
+              appointments,
+              selectedItem.name,
+              last30Start,
+              today
+            );
+            const averageDailyUse = unitsConsumed30 / 30;
 
             if (averageDailyUse === 0) {
               return (
@@ -703,10 +738,19 @@ export function Reports() {
             const currentStock = selectedItem.stock;
             const reorderPoint = selectedItem.reorderPoint || 0;
             const safetyStock = selectedItem.safetyStock || 0;
-            const leadTime = selectedItem.leadTime || 0;
 
             // Calculate days until stockout
             const daysUntilStockout = Math.ceil(currentStock / averageDailyUse);
+            const daysUntilReorder =
+              reorderPoint > 0
+                ? (currentStock <= reorderPoint
+                    ? 0
+                    : Math.ceil((currentStock - reorderPoint) / averageDailyUse))
+                : null;
+            const reorderByDate =
+              daysUntilReorder !== null ? addDays(today, daysUntilReorder) : null;
+            const estimatedStockoutDate =
+              averageDailyUse > 0 ? addDays(today, daysUntilStockout) : null;
             
             // Generate data points from today to stockout
             const chartData: Array<{
@@ -716,9 +760,6 @@ export function Reports() {
               safetyStock: number;
               currentStock?: number;
             }> = [];
-
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
 
             for (let day = 0; day <= daysUntilStockout; day++) {
               const date = new Date(today);
@@ -735,9 +776,44 @@ export function Reports() {
               });
             }
 
+            const reorderReferenceDateLabel =
+              daysUntilReorder !== null && daysUntilReorder >= 0 && daysUntilReorder < chartData.length
+                ? chartData[daysUntilReorder].date
+                : null;
+            const formatLongDate = (d: Date | null) =>
+              d
+                ? d.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : '—';
+
             return (
-              <div className="h-96">
-                <ResponsiveContainer width="100%" height="100%">
+              <div>
+                <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-lg border bg-white p-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Current stock</p>
+                    <p className="mt-2 text-2xl font-bold text-gray-900 tabular-nums">
+                      {currentStock}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-white p-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Reorder by</p>
+                    <p className="mt-2 text-lg font-semibold text-orange-700">
+                      {formatLongDate(reorderByDate)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border bg-white p-4">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Estimated stockout</p>
+                    <p className="mt-2 text-lg font-semibold text-red-700">
+                      {formatLongDate(estimatedStockoutDate)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-96">
+                  <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                     <defs>
                       <linearGradient id="colorStock" x1="0" y1="0" x2="0" y2="1">
@@ -911,6 +987,20 @@ export function Reports() {
                       dot={false}
                       name="Reorder Point"
                     />
+                    {reorderReferenceDateLabel && (
+                      <ReferenceLine
+                        x={reorderReferenceDateLabel}
+                        stroke="#f97316"
+                        strokeWidth={2}
+                        strokeDasharray="4 4"
+                        label={{
+                          value: `Reorder by ${reorderReferenceDateLabel}`,
+                          position: 'top',
+                          fill: '#c2410c',
+                          fontSize: 11,
+                        }}
+                      />
+                    )}
                     {/* Green dot: Current stock (only on first day) */}
                     <Line
                       type="monotone"
@@ -922,7 +1012,8 @@ export function Reports() {
                       name="Current Stock"
                     />
                   </ComposedChart>
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
+                </div>
                 
                 {/* Chart Legend */}
                 <div className="-mt-2 mb-1 flex items-center justify-center gap-6 text-sm flex-wrap">
@@ -941,6 +1032,10 @@ export function Reports() {
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500"></div>
                     <span className="text-gray-700">Current Stock</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-1 border-t-2 border-dashed border-orange-700"></div>
+                    <span className="text-gray-700">Reorder-by marker</span>
                   </div>
                 </div>
               </div>

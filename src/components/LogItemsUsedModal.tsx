@@ -18,6 +18,55 @@ interface ItemUsage {
   itemCategory: string;
 }
 
+const MedicationIcon = ({ className }: { className?: string }) => (
+  <img
+    src="https://cdn-icons-png.flaticon.com/128/883/883356.png"
+    alt="Medication"
+    className={className}
+  />
+);
+
+const DiagnosticIcon = ({ className }: { className?: string }) => (
+  <img
+    src="https://cdn-icons-png.flaticon.com/128/2920/2920233.png"
+    alt="Diagnostic"
+    className={className}
+  />
+);
+
+const SurgicalIcon = ({ className }: { className?: string }) => (
+  <img
+    src="https://cdn-icons-png.flaticon.com/128/9442/9442009.png"
+    alt="Surgical"
+    className={className}
+  />
+);
+
+const SuppliesIcon = ({ className }: { className?: string }) => (
+  <img
+    src="https://cdn-icons-png.flaticon.com/128/2871/2871597.png"
+    alt="Supplies"
+    className={className}
+  />
+);
+
+const EquipmentIcon = ({ className }: { className?: string }) => (
+  <img
+    src="https://cdn-icons-png.flaticon.com/128/7918/7918229.png"
+    alt="Equipment"
+    className={className}
+  />
+);
+
+const CategoryIcon = ({ category, className }: { category: string; className?: string }) => {
+  if (category === 'Medication') return <MedicationIcon className={className} />;
+  if (category === 'Diagnostic') return <DiagnosticIcon className={className} />;
+  if (category === 'Surgical') return <SurgicalIcon className={className} />;
+  if (category === 'Supplies') return <SuppliesIcon className={className} />;
+  if (category === 'Equipment') return <EquipmentIcon className={className} />;
+  return <Package className={`text-gray-400 ${className || ''}`} />;
+};
+
 export function LogItemsUsedModal({ isOpen, onClose, appointment }: LogItemsUsedModalProps) {
   const { items } = useInventoryStore();
   const { updateAppointment } = useAppointmentStore();
@@ -248,7 +297,7 @@ export function LogItemsUsedModal({ isOpen, onClose, appointment }: LogItemsUsed
                           <tr key={item.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center">
-                                <Package className="h-5 w-5 text-gray-400 mr-2" />
+                                <CategoryIcon category={item.category} className="h-5 w-5 mr-2" />
                                 <span className="text-sm font-medium text-gray-900">{item.name}</span>
                               </div>
                             </td>
@@ -302,7 +351,7 @@ export function LogItemsUsedModal({ isOpen, onClose, appointment }: LogItemsUsed
                     return (
                       <div key={usage.itemId} className="flex items-center justify-between bg-white p-3 rounded border">
                         <div className="flex items-center gap-3">
-                          <Package className="h-5 w-5 text-gray-400" />
+                          <CategoryIcon category={usage.itemCategory} className="h-5 w-5" />
                           <div>
                             <span className="text-sm font-medium text-gray-900">{usage.itemName}</span>
                             <span className="text-xs text-gray-500 ml-2">({usage.itemCategory})</span>

@@ -47,6 +47,28 @@ export function Appointments() {
   const [showPayment, setShowPayment] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'at_clinic' | 'online'>('at_clinic');
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
+  const isWalkInBooking = role === 'vet' || role === 'staff';
+
+  const handlePhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
+
+    if (!isWalkInBooking) {
+      setFormData({ ...formData, phone: digitsOnly });
+      return;
+    }
+
+    if (!digitsOnly) {
+      setFormData({ ...formData, phone: '' });
+      return;
+    }
+
+    if (digitsOnly.length === 1) {
+      setFormData({ ...formData, phone: '0' });
+      return;
+    }
+
+    setFormData({ ...formData, phone: `09${digitsOnly.slice(2)}` });
+  };
 
   // Get stored user data for pet owners (try raw key and lowercase for compatibility)
   const getStoredOwnerData = (): { email?: string; phone?: string; firstName?: string; lastName?: string; username?: string } | null => {
@@ -458,6 +480,10 @@ export function Appointments() {
       toast.error('Phone number is required');
       return false;
     }
+    if (isWalkInBooking && !/^09\d{9}$/.test(formData.phone)) {
+      toast.error('Phone number must be exactly 11 digits and start with 09');
+      return false;
+    }
     // Email is only required for pet owners
     if (role === 'owner') {
       if (!formData.email.trim()) {
@@ -835,7 +861,7 @@ export function Appointments() {
                     <input
                       type="tel"
                       value={formData.phone}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={handlePhoneChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       placeholder="Enter phone number"
                     />
@@ -957,7 +983,7 @@ export function Appointments() {
               <input
                 type="tel"
                 value={formData.phone}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={handlePhoneChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 placeholder="Enter phone number"
               />

@@ -60,6 +60,13 @@ interface ADUItem {
   category?: string;
 }
 
+const toLocalYmd = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export function Inventory() {
   const { items, deleteItem } = useInventoryStore();
   const { appointments } = useAppointmentStore();
@@ -98,7 +105,13 @@ export function Inventory() {
           if (itemUsed.deductionStatus === 'confirmed') {
             const itemName = itemUsed.itemName;
             const quantity = itemUsed.quantity || 0;
-            const appointmentDate = appointment.date;
+            let usageDate = appointment.date;
+            if (itemUsed.approvedAt) {
+              const approvedDate = new Date(itemUsed.approvedAt);
+              if (!Number.isNaN(approvedDate.getTime())) {
+                usageDate = toLocalYmd(approvedDate);
+              }
+            }
 
             if (!itemUsageMap.has(itemName)) {
               itemUsageMap.set(itemName, { totalQuantity: 0, dates: new Set() });
@@ -106,7 +119,7 @@ export function Inventory() {
 
             const itemData = itemUsageMap.get(itemName)!;
             itemData.totalQuantity += quantity;
-            itemData.dates.add(appointmentDate);
+            itemData.dates.add(usageDate);
           }
         });
       }

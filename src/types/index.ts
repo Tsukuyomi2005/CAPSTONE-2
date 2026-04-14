@@ -36,6 +36,9 @@ export interface Appointment {
     deductionStatus?: 'pending' | 'confirmed' | 'rejected';
     loggedAt?: string;
     rejectedReason?: string;
+    approvedBy?: string;
+    approvedByName?: string;
+    approvedAt?: string;
   }>;
   rescheduleCount?: number;
   rescheduleHistory?: Array<{

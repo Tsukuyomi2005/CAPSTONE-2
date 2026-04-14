@@ -312,11 +312,12 @@ export const update = mutation({
 
     const nextEmail = updates.email !== undefined ? updates.email : appointment.email;
     const ownerKey = normalizeOwnerEmail(nextEmail);
+    const hasOwnerEmail = ownerKey.length > 0;
     const prevStatus = appointment.status;
     const nextStatus =
       updates.status !== undefined ? updates.status : appointment.status;
 
-    if (nextStatus === "approved" && prevStatus !== "approved") {
+    if (nextStatus === "approved" && prevStatus !== "approved" && hasOwnerEmail) {
       await ctx.runMutation(internal.notifications.insertInternal, {
         audience: "owner",
         ownerEmail: ownerKey,
@@ -324,7 +325,7 @@ export const update = mutation({
         appointmentId: id,
       });
     }
-    if (nextStatus === "rejected" && prevStatus !== "rejected") {
+    if (nextStatus === "rejected" && prevStatus !== "rejected" && hasOwnerEmail) {
       await ctx.runMutation(internal.notifications.insertInternal, {
         audience: "owner",
         ownerEmail: ownerKey,
