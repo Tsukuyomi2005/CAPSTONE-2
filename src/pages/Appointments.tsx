@@ -632,24 +632,26 @@ export function Appointments() {
                 {step.number}
               </div>
               <span
-                className={`mt-2 text-sm font-medium ${
+                className={`mt-2 block w-full text-center text-sm font-semibold ${
                   currentStep === step.number
-                    ? 'text-purple-600'
+                    ? 'text-purple-700'
                     : currentStep > step.number
-                    ? 'text-purple-500'
-                    : 'text-gray-500'
+                    ? 'text-[#6b4423]'
+                    : 'text-[#7a5a45]'
                 }`}
               >
                 {step.label}
               </span>
             </div>
-            {index < steps.length - 1 && (
-              <div
-                className={`flex-1 h-1 mx-2 transition-all duration-300 ${
-                  currentStep > step.number ? 'bg-purple-500' : 'bg-gray-200'
-                }`}
-              />
-            )}
+            <div
+              className={`flex-1 h-1 mx-2 transition-all duration-300 ${
+                index === steps.length - 1
+                  ? 'opacity-0'
+                  : currentStep > step.number
+                  ? 'bg-purple-500'
+                  : 'bg-gray-200'
+              }`}
+            />
           </div>
         ))}
       </div>
@@ -670,8 +672,8 @@ export function Appointments() {
                   onClick={() => handleServiceSelect(service)}
                   className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
                     selectedService?.id === service.id
-                      ? 'border-purple-500 bg-purple-50 shadow-lg shadow-purple-200'
-                      : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50'
+                        ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
+                        : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
                   }`}
                 >
                   <h3 className="font-semibold text-gray-900 mb-1">{service.name}</h3>
@@ -756,16 +758,16 @@ export function Appointments() {
                         key={time}
                         onClick={() => handleTimeSlotClick(time)}
                         disabled={!isAvailable || isPast}
-                        className={`p-3 rounded-lg text-sm font-medium transition-colors ${
+                        className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${
                           selectedTime === time
-                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-200'
+                            ? 'bg-purple-600 border-purple-700 text-white shadow-lg shadow-purple-200'
                             : isPast
-                            ? 'bg-gray-200 text-gray-400 border-2 border-gray-300 cursor-not-allowed opacity-60'
+                            ? 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed opacity-60'
                             : isBooked
-                            ? 'bg-red-100 text-red-700 border-2 border-red-300 cursor-not-allowed'
+                            ? 'bg-red-100 text-red-700 border-red-300 cursor-not-allowed'
                             : !isAvailable
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                            : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 hover:border-purple-300'
                         }`}
                         title={
                           isPast 
@@ -889,8 +891,8 @@ export function Appointments() {
                       onClick={() => setSelectedVet(vet)}
                       className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
                         selectedVet === vet
-                          ? 'border-purple-500 bg-purple-50 shadow-lg shadow-purple-200'
-                          : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50'
+                          ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
+                          : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
                       }`}
                     >
                       <h3 className="font-semibold text-gray-900">{vet}</h3>
@@ -1115,12 +1117,12 @@ export function Appointments() {
                 onClick={() => setPaymentMethod('at_clinic')}
                 className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
                   paymentMethod === 'at_clinic'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
+                    : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <Building2 className={`h-6 w-6 mt-1 ${paymentMethod === 'at_clinic' ? 'text-blue-600' : 'text-gray-600'}`} />
+                  <Building2 className={`h-6 w-6 mt-1 ${paymentMethod === 'at_clinic' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900 mb-2">
                       {role === 'owner' ? 'Pay Balance at Clinic' : 'Pay in Cash'}
@@ -1149,12 +1151,12 @@ export function Appointments() {
                 onClick={() => setPaymentMethod('online')}
                 className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
                   paymentMethod === 'online'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
+                    : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <Smartphone className={`h-6 w-6 mt-1 ${paymentMethod === 'online' ? 'text-blue-600' : 'text-gray-600'}`} />
+                  <Smartphone className={`h-6 w-6 mt-1 ${paymentMethod === 'online' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900 mb-2">Pay Online</h3>
                     {selectedService && (
@@ -1200,7 +1202,7 @@ export function Appointments() {
             <button
               onClick={paymentMethod === 'online' ? handleProceedToPayment : handleBookAppointment}
               disabled={!formData.petName || !formData.ownerName || !formData.phone || (role === 'owner' && !formData.email)}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 bg-[#6b4423] text-white rounded-lg hover:bg-[#5a3720] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Book Appointment
             </button>

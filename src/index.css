@@ -32,6 +32,34 @@ body {
   background: var(--color-light);
 }
 
+/* Brown-themed card surfaces for app pages */
+.themed-shell .bg-white.rounded,
+.themed-shell .bg-white.rounded-lg,
+.themed-shell .bg-white.rounded-xl,
+.themed-shell .bg-white.rounded-2xl,
+.themed-shell .bg-white.rounded-3xl {
+  background: linear-gradient(160deg, #fffdfb 0%, #fff7ef 52%, #fdf2e7 100%);
+  border: 2px solid rgba(92, 64, 51, 0.34) !important;
+  box-shadow: 0 10px 24px rgba(92, 64, 51, 0.12);
+}
+
+.themed-shell .bg-white.rounded:hover,
+.themed-shell .bg-white.rounded-lg:hover,
+.themed-shell .bg-white.rounded-xl:hover,
+.themed-shell .bg-white.rounded-2xl:hover,
+.themed-shell .bg-white.rounded-3xl:hover {
+  box-shadow: 0 14px 30px rgba(92, 64, 51, 0.18);
+  border-color: rgba(92, 64, 51, 0.48) !important;
+}
+
+/* Secondary muted boxes */
+.themed-shell .bg-gray-50.rounded,
+.themed-shell .bg-gray-50.rounded-lg,
+.themed-shell .bg-gray-50.rounded-xl {
+  background: linear-gradient(160deg, #fdf8f3 0%, #f8efe5 100%);
+  border: 2px solid rgba(92, 64, 51, 0.24) !important;
+}
+
 @keyframes float-slow {
   0% {
     transform: translateY(0px);

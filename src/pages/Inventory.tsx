@@ -60,13 +60,6 @@ interface ADUItem {
   category?: string;
 }
 
-const toLocalYmd = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 export function Inventory() {
   const { items, deleteItem } = useInventoryStore();
   const { appointments } = useAppointmentStore();
@@ -93,9 +86,13 @@ export function Inventory() {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   // Calculate Average Daily Use (ADU) for each item
-  // Include ALL items from inventory, showing 0 ADU for items without usage data
+  // Match clinic staff logic: rolling 30-day confirmed usage / 30
   const aduData = useMemo(() => {
-    const itemUsageMap = new Map<string, { totalQuantity: number; dates: Set<string> }>();
+    const itemUsageMap = new Map<string, { totalQuantity: number }>();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const last30Start = new Date(today);
+    last30Start.setDate(last30Start.getDate() - 29);
 
     // Process all appointments with confirmed item deductions
     appointments.forEach(appointment => {
@@ -105,21 +102,23 @@ export function Inventory() {
           if (itemUsed.deductionStatus === 'confirmed') {
             const itemName = itemUsed.itemName;
             const quantity = itemUsed.quantity || 0;
-            let usageDate = appointment.date;
+            let usageDate = new Date(`${appointment.date}T12:00:00`);
             if (itemUsed.approvedAt) {
               const approvedDate = new Date(itemUsed.approvedAt);
               if (!Number.isNaN(approvedDate.getTime())) {
-                usageDate = toLocalYmd(approvedDate);
+                usageDate = approvedDate;
               }
             }
+            usageDate.setHours(0, 0, 0, 0);
+
+            if (usageDate < last30Start || usageDate > today) return;
 
             if (!itemUsageMap.has(itemName)) {
-              itemUsageMap.set(itemName, { totalQuantity: 0, dates: new Set() });
+              itemUsageMap.set(itemName, { totalQuantity: 0 });
             }
 
             const itemData = itemUsageMap.get(itemName)!;
             itemData.totalQuantity += quantity;
-            itemData.dates.add(usageDate);
           }
         });
       }
@@ -131,9 +130,7 @@ export function Inventory() {
       let averageDailyUse = 0;
 
       if (usageData) {
-        const uniqueDays = usageData.dates.size;
-        // Calculate average daily use
-        averageDailyUse = uniqueDays > 0 ? usageData.totalQuantity / uniqueDays : 0;
+        averageDailyUse = usageData.totalQuantity / 30;
       }
 
       return {

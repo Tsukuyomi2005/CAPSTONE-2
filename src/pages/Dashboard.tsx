@@ -301,37 +301,33 @@ export function Dashboard() {
         </div>
 
         {/* Stats + pets summary */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
           {/* Stat cards */}
-          <div className="lg:col-span-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {stats.map((stat) => (
-                <div
-                  key={stat.name}
-                  className="bg-white rounded-2xl p-5 shadow-sm border hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        {stat.name}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold text-gray-900">{stat.value}</p>
-                    </div>
-                    <div className={`p-3 rounded-xl ${stat.color}`}>
-                      <stat.icon className="h-6 w-6" />
-                    </div>
-                  </div>
+          {stats.map((stat) => (
+            <div
+              key={stat.name}
+              className="bg-white rounded-2xl p-5 shadow-sm border hover:shadow-md transition-shadow h-[152px]"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-500">
+                    {stat.name}
+                  </p>
+                  <p className="mt-3 text-3xl font-bold text-gray-900 leading-none">{stat.value}</p>
                 </div>
-              ))}
+                <div className={`p-3.5 rounded-xl ${stat.color}`}>
+                  <stat.icon className="h-7 w-7" />
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
 
           {/* Pets summary */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border">
+          <div className="bg-white rounded-2xl p-5 shadow-sm border flex flex-col h-[152px] min-h-0">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Your pets</h3>
             {hasPets ? (
-              <div className="space-y-2">
-                {records.slice(0, 4).map((record) => (
+              <div className="space-y-2 flex-1 min-h-0 overflow-y-auto pr-1">
+                {records.map((record) => (
                   <div
                     key={record.id}
                     className="flex items-center justify-between rounded-lg bg-purple-50 px-3 py-2"
@@ -344,14 +340,6 @@ export function Dashboard() {
                     </div>
                   </div>
                 ))}
-                {records.length > 4 && (
-                  <button
-                    onClick={() => navigate('/pet-records')}
-                    className="mt-1 text-xs font-medium text-purple-700 hover:text-purple-900"
-                  >
-                    View all records
-                  </button>
-                )}
               </div>
             ) : (
               <p className="text-sm text-gray-500">

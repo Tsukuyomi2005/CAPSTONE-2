@@ -57,8 +57,8 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={onClose} />
-        <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
-          <div className="flex items-center justify-between p-6 border-b">
+        <div className="relative w-full max-w-md rounded-lg border-2 border-[#5C4033]/25 bg-[#fffaf5] shadow-xl">
+          <div className="flex items-center justify-between border-b border-[#5C4033]/20 p-6">
             <h3 className="text-lg font-semibold text-gray-900">
               Payment - Down Payment
             </h3>
@@ -72,12 +72,12 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
           </div>
 
           <form onSubmit={handlePayment} className="p-6 space-y-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h4 className="font-medium text-blue-900 mb-2">Payment Summary</h4>
-              <div className="space-y-1 text-sm text-blue-800">
+            <div className="rounded-lg border border-[#5C4033]/20 bg-[#f5e9dc] p-4">
+              <h4 className="mb-2 font-medium text-[#5a3720]">Payment Summary</h4>
+              <div className="space-y-1 text-sm text-[#6b4423]">
                 <p><strong>Service:</strong> {serviceType}</p>
                 <p><strong>Down Payment:</strong> ₱{amount}</p>
-                <p className="text-xs text-blue-600">
+                <p className="text-xs text-[#7a5a45]">
                   *Remaining balance will be paid at the clinic
                 </p>
               </div>
@@ -88,32 +88,44 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
                 Select Payment Method
               </label>
               <div className="space-y-2">
-                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                <label
+                  className={`flex cursor-pointer items-center rounded-lg border-2 p-3 transition-colors ${
+                    paymentMethod === 'gcash'
+                      ? 'border-[#5a3720] bg-[#fbe9d7]'
+                      : 'border-[#5C4033]/25 bg-white hover:border-[#6b4423]/45 hover:bg-[#fff3e6]'
+                  }`}
+                >
                   <input
                     type="radio"
                     name="paymentMethod"
                     value="gcash"
                     checked={paymentMethod === 'gcash'}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setPaymentMethod(e.target.value as 'gcash')}
-                    className="mr-3"
+                    className="mr-3 accent-[#6b4423]"
                   />
-                  <Smartphone className="h-6 w-6 text-blue-600 mr-3" />
+                  <Smartphone className={`mr-3 h-6 w-6 ${paymentMethod === 'gcash' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
                   <div>
                     <div className="font-medium text-gray-900">GCash</div>
                     <div className="text-sm text-gray-600">Pay with your GCash wallet</div>
                   </div>
                 </label>
                 
-                <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                <label
+                  className={`flex cursor-pointer items-center rounded-lg border-2 p-3 transition-colors ${
+                    paymentMethod === 'paymaya'
+                      ? 'border-[#5a3720] bg-[#fbe9d7]'
+                      : 'border-[#5C4033]/25 bg-white hover:border-[#6b4423]/45 hover:bg-[#fff3e6]'
+                  }`}
+                >
                   <input
                     type="radio"
                     name="paymentMethod"
                     value="paymaya"
                     checked={paymentMethod === 'paymaya'}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => setPaymentMethod(e.target.value as 'paymaya')}
-                    className="mr-3"
+                    className="mr-3 accent-[#6b4423]"
                   />
-                  <CreditCard className="h-6 w-6 text-green-600 mr-3" />
+                  <CreditCard className={`mr-3 h-6 w-6 ${paymentMethod === 'paymaya' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
                   <div>
                     <div className="font-medium text-gray-900">PayMaya</div>
                     <div className="text-sm text-gray-600">Pay with your PayMaya account</div>
@@ -130,7 +142,7 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
                 type="tel"
                 value={phoneNumber}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setPhoneNumber(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-lg border border-[#5C4033]/30 bg-white px-3 py-2 focus:border-[#6b4423] focus:ring-2 focus:ring-[#8a5a3b]/30"
                 placeholder="Enter your mobile number"
                 required
                 disabled={isProcessing}
@@ -140,8 +152,8 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
               </p>
             </div>
 
-            <div className="bg-yellow-50 p-3 rounded-lg">
-              <p className="text-sm text-yellow-800">
+            <div className="rounded-lg border border-[#b88b62]/25 bg-[#f8f1dd] p-3">
+              <p className="text-sm text-[#8a5a2b]">
                 <strong>Note:</strong> You will receive an SMS notification to complete the payment on your {paymentMethod.toUpperCase()} app.
               </p>
             </div>
@@ -150,14 +162,14 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex-1 rounded-lg border border-[#5C4033]/30 px-4 py-2 text-gray-700 transition-colors hover:bg-[#fff3e6]"
                 disabled={isProcessing}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex-1 rounded-lg bg-[#6b4423] px-4 py-2 text-white transition-colors hover:bg-[#5a3720] disabled:opacity-50"
                 disabled={isProcessing}
               >
                 {isProcessing ? 'Processing...' : `Pay ₱${amount}`}

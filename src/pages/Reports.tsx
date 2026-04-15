@@ -412,20 +412,20 @@ export function Reports() {
     // White/transparent: 0 appointments - No activity
     if (count === 0) return 'bg-white';
     
-    // Very Light Purple: 1-2 appointments - Low activity / off-peak
-    if (count >= 1 && count <= 2) return 'bg-purple-100';
+    // Very Light Red: 1-2 appointments - Low activity / off-peak
+    if (count >= 1 && count <= 2) return 'bg-red-100';
     
-    // Light Purple: 3-4 appointments - Moderate activity
-    if (count >= 3 && count <= 4) return 'bg-purple-200';
+    // Light Red: 3-4 appointments - Moderate activity
+    if (count >= 3 && count <= 4) return 'bg-red-200';
     
-    // Soft Purple: 5-6 appointments - Busy hours
-    if (count >= 5 && count <= 6) return 'bg-purple-300';
+    // Soft Red: 5-6 appointments - Busy hours
+    if (count >= 5 && count <= 6) return 'bg-red-300';
     
-    // Medium Purple: 7-8 appointments - High activity / peak hours starting
-    if (count >= 7 && count <= 8) return 'bg-purple-400';
+    // Medium Red: 7-8 appointments - High activity / peak hours starting
+    if (count >= 7 && count <= 8) return 'bg-red-400';
     
-    // Dark Purple: 9+ appointments - Heavy peak hours / fully booked
-    return 'bg-purple-600';
+    // Dark Red: 9+ appointments - Heavy peak hours / fully booked
+    return 'bg-red-600';
   };
 
   // Colors for the donut chart - diverse colors
@@ -660,11 +660,11 @@ export function Reports() {
             <span className="text-xs text-gray-600">Less</span>
             <div className="flex gap-1">
               <div className="w-6 h-6 bg-gray-50 border border-gray-200 rounded"></div>
-              <div className="w-6 h-6 bg-purple-200 rounded"></div>
-              <div className="w-6 h-6 bg-purple-300 rounded"></div>
-              <div className="w-6 h-6 bg-purple-400 rounded"></div>
-              <div className="w-6 h-6 bg-purple-500 rounded"></div>
-              <div className="w-6 h-6 bg-purple-600 rounded"></div>
+              <div className="w-6 h-6 bg-red-100 rounded"></div>
+              <div className="w-6 h-6 bg-red-200 rounded"></div>
+              <div className="w-6 h-6 bg-red-300 rounded"></div>
+              <div className="w-6 h-6 bg-red-400 rounded"></div>
+              <div className="w-6 h-6 bg-red-600 rounded"></div>
             </div>
             <span className="text-xs text-gray-600">More</span>
           </div>

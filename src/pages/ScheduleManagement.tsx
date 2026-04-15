@@ -441,7 +441,7 @@ export function ScheduleManagement() {
         {!isVeterinarian && (
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 rounded-lg bg-[#6b4423] px-4 py-2 text-white transition-colors hover:bg-[#5a3720]"
           >
             <Filter className="h-4 w-4" />
             Filter
@@ -513,7 +513,7 @@ export function ScheduleManagement() {
             </button>
             <button
               onClick={() => setShowFilters(false)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="rounded-lg bg-[#6b4423] px-4 py-2 text-white transition-colors hover:bg-[#5a3720]"
             >
               Apply Filters
             </button>

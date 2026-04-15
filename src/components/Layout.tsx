@@ -328,9 +328,9 @@ export function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden bg-gradient-to-br from-[#f8f1ea] via-[#f6eee7] to-[#f4ece5]">
         {/* Header */}
-        <header className="bg-white border-b border-[#5C4033]/10 px-4 lg:px-6 h-16 flex items-center justify-between gap-3">
+        <header className="bg-[#fffaf6] border-b-2 border-[#5C4033]/30 px-4 lg:px-6 h-16 flex items-center justify-between gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden text-gray-500 hover:text-gray-700 shrink-0"
@@ -350,7 +350,7 @@ export function Layout({ children }: LayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto p-4 lg:p-6">
+        <main className="themed-shell flex-1 overflow-auto p-4 lg:p-6">
           {children}
         </main>
       </div>

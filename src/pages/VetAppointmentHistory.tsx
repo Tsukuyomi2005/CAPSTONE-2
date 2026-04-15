@@ -561,7 +561,7 @@ export function VetAppointmentHistory() {
                       const StatusIcon = statusInfo.icon;
 
                       return (
-                        <div key={index} className="border border-gray-200 rounded-lg p-4">
+                        <div key={index} className="rounded-lg border-2 border-[#5C4033]/35 bg-[#fffaf5] p-4">
                           <div className="flex items-start justify-between mb-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
@@ -587,7 +587,7 @@ export function VetAppointmentHistory() {
                           </div>
 
                           {/* Status Details */}
-                          <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="mt-3 border-t border-[#5C4033]/20 pt-3">
                             <div className="flex items-center gap-2 text-sm mb-2">
                               <StatusIcon className={`h-4 w-4 ${statusInfo.iconColor}`} />
                               <span className="font-medium text-gray-900">Status: {statusInfo.label}</span>
