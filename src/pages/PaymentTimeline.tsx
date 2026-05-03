@@ -548,9 +548,9 @@ export function PaymentTimeline() {
           <h2 className="text-xl font-semibold text-gray-900">Transaction History</h2>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="max-h-[min(32rem,calc(100dvh-20rem))] overflow-y-auto overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appointment ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>

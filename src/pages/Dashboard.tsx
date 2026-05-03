@@ -1,13 +1,13 @@
-import { Calendar, Users, DollarSign, Heart, Stethoscope, CheckCircle } from 'lucide-react';
+import { Calendar, Users, DollarSign, Heart, Stethoscope, CheckCircle, Clock, Package } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useInventoryStore } from '../stores/inventoryStore';
 import type { InventoryItem } from '../types';
 import { useAppointmentStore } from '../stores/appointmentStore';
 import { useRoleStore } from '../stores/roleStore';
 import { usePetRecordsStore } from '../stores/petRecordsStore';
-import { useScheduleStore } from '../stores/scheduleStore';
 import { useStaffStore } from '../stores/staffStore';
 import { useServiceStore } from '../stores/serviceStore';
+import { useAvailabilityStore } from '../stores/availabilityStore';
 import { useNavigate } from 'react-router-dom';
 import type { Appointment } from '../types';
 import { getStockStatus, stockAlertDisplay, getLowStockItems } from '../utils/stockAlerts';
@@ -35,9 +35,9 @@ export function Dashboard() {
   const { appointments } = useAppointmentStore();
   const { records } = usePetRecordsStore();
   const { role } = useRoleStore();
-  const { schedules } = useScheduleStore();
   const { staff } = useStaffStore();
   const { services } = useServiceStore();
+  const { allAvailability } = useAvailabilityStore();
   const navigate = useNavigate();
 
   const hasFullAccess = role === 'vet' || role === 'staff';
@@ -88,11 +88,16 @@ export function Dashboard() {
 
   // Format time to 12-hour format
   const formatTime12Hour = (time24: string): string => {
+    if (!time24 || !time24.includes(':')) return time24 || '—';
     const [hours, minutes] = time24.split(':').map(Number);
     const period = hours >= 12 ? 'PM' : 'AM';
     const hours12 = hours % 12 || 12;
     return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
+
+  const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const sortWorkingDays = (days: string[]) =>
+    [...days].sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
 
   // Format date for display
   const formatDate = (dateStr: string): string => {
@@ -103,22 +108,32 @@ export function Dashboard() {
     });
   };
 
-  // Get vet schedules - schedules that vets have set for themselves
-  const vetSchedules = schedules
-    .filter(schedule => {
-      // Get all vet names from staff
-      const vetNames = staff
-        .filter(member => member.position === 'Veterinarian' && member.status === 'active')
-        .map(member => member.name);
-      // Check if schedule has any vets
-      return schedule.veterinarians.some(vet => vetNames.includes(vet));
+  const schedulableStaff = staff.filter(
+    (member) =>
+      (member.position === 'Veterinarian' || member.position === 'Vet Staff') &&
+      member.status === 'active'
+  );
+
+  const findAvailabilityForName = (name: string) => {
+    const key = name.trim().toLowerCase();
+    return (
+      allAvailability.find((a) => a.veterinarianName.trim().toLowerCase() === key) ?? null
+    );
+  };
+
+  const seenStaffNameKeys = new Set<string>();
+  const weeklyVetDashboardRows = schedulableStaff
+    .filter((member) => {
+      const k = member.name.trim().toLowerCase();
+      if (seenStaffNameKeys.has(k)) return false;
+      seenStaffNameKeys.add(k);
+      return true;
     })
-    .sort((a, b) => {
-      const dateCompare = a.date.localeCompare(b.date);
-      if (dateCompare !== 0) return dateCompare;
-      return a.startTime.localeCompare(b.startTime);
-    })
-    .slice(0, 10); // Limit to 10 most recent
+    .map((member) => ({
+      name: member.name,
+      roleLabel: member.position === 'Veterinarian' ? 'Veterinarian' : 'Clinic staff',
+      availability: findAvailabilityForName(member.name),
+    }));
 
   // Calculate monthly revenue for the current year (Jan-Dec) based on payment confirmation dates
   // This matches PaymentTransactions logic: count FULL price per completed appointment
@@ -508,28 +523,94 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Vet's Schedule - Only show for admin */}
+        {/* Staff schedules - weekly availability (admin) */}
         {hasFullAccess && (
-          <div className="bg-white rounded-lg p-6 shadow-sm border">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Vet's Schedule</h3>
-            <div className="space-y-3">
-              {vetSchedules.length === 0 ? (
-                <p className="text-gray-500 text-sm">No vet schedules found</p>
-              ) : (
-                vetSchedules.slice(0, 5).map((schedule) => (
-                  schedule.veterinarians.map((vetName, idx) => (
-                    <div key={`${schedule.id}-${idx}`} className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{vetName}</p>
-                        <p className="text-xs text-gray-600">
-                          {formatDate(schedule.date)} @ {formatTime12Hour(schedule.startTime)}
-                        </p>
+          <div className="rounded-lg border border-[#5C4033]/25 bg-[#fffaf6] shadow-sm flex flex-col min-h-[420px] overflow-hidden">
+            <div className="border-b border-[#5C4033]/15 bg-[#faf8f6] px-6 py-4">
+              <h3 className="text-lg font-semibold text-[#5C4033]">Staff Schedules</h3>
+              <p className="text-xs text-[#6b4e3d]/90 mt-1 leading-relaxed">
+                Weekly availability and working hours from each team member&apos;s Manage Availability
+                settings.
+              </p>
+            </div>
+            <div className="p-6 pt-4 flex-1 min-h-0 flex flex-col bg-[#fffaf6]">
+              <div className="max-h-[min(22rem,52vh)] overflow-y-auto space-y-3 pr-1 [scrollbar-color:#c4a574_transparent]">
+                {weeklyVetDashboardRows.length === 0 ? (
+                  <p className="text-sm text-[#6b4e3d]/80">
+                    No veterinarians or clinic staff on the roster yet.
+                  </p>
+                ) : (
+                  weeklyVetDashboardRows.map((row) => {
+                    const a = row.availability;
+                    const isVet = row.roleLabel === 'Veterinarian';
+                    return (
+                      <div
+                        key={row.name}
+                        className="rounded-lg border border-[#5C4033]/15 bg-white p-3 shadow-sm"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border ${
+                              isVet
+                                ? 'border-[#8B5A36]/30 bg-[#8B5A36]/10'
+                                : 'border-[#5C4033]/20 bg-[#f4e4d4]/80'
+                            }`}
+                          >
+                            {isVet ? (
+                              <Stethoscope className="h-4 w-4 text-[#8B5A36]" />
+                            ) : (
+                              <Package className="h-4 w-4 text-[#5C4033]" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-[#3d2b22]">{row.name}</p>
+                            <span
+                              className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                isVet
+                                  ? 'bg-[#8B5A36]/15 text-[#5C4033]'
+                                  : 'border border-[#8B5A36]/25 bg-[#f4e4d4] text-[#5C4033]'
+                              }`}
+                            >
+                              {row.roleLabel}
+                            </span>
+                            {!a ? (
+                              <p className="text-xs text-[#6b4e3d] mt-2 leading-relaxed">
+                                No weekly schedule saved yet. They can set this under Manage
+                                Availability.
+                              </p>
+                            ) : (
+                              <>
+                                <p className="text-xs text-[#4a372c] mt-2 leading-relaxed">
+                                  <span className="font-semibold text-[#5C4033]/90">Working days: </span>
+                                  {a.workingDays.length === 0
+                                    ? 'None selected'
+                                    : sortWorkingDays(a.workingDays).join(', ')}
+                                </p>
+                                <p className="text-xs text-[#4a372c] mt-1.5 flex items-center gap-1.5 flex-wrap leading-relaxed">
+                                  <Clock className="h-3.5 w-3.5 shrink-0 text-[#8B5A36]" />
+                                  <span className="font-semibold text-[#5C4033]/90">Hours: </span>
+                                  <span className="font-medium text-[#5C4033] tabular-nums">
+                                    {formatTime12Hour(a.startTime)} – {formatTime12Hour(a.endTime)}
+                                  </span>
+                                </p>
+                                {a.lunchStartTime && a.lunchEndTime && (
+                                  <p className="text-xs text-[#6b4e3d] mt-1.5 leading-relaxed">
+                                    <span className="font-semibold text-[#5C4033]/85">Lunch: </span>
+                                    <span className="tabular-nums">
+                                      {formatTime12Hour(a.lunchStartTime)} –{' '}
+                                      {formatTime12Hour(a.lunchEndTime)}
+                                    </span>
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )).flat().slice(0, 5)
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         )}
