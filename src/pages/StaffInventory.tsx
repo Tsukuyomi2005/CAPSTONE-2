@@ -102,6 +102,24 @@ function startOfWeekMonday(d: Date): Date {
   return x;
 }
 
+/** Labels 30d usage bars with the actual inclusive date span (week buckets are Monday-aligned). */
+function format30dHistoryRangeLabel(actualStart: Date, actualEnd: Date, today: Date): string {
+  const spanYears = actualStart.getFullYear() !== actualEnd.getFullYear();
+  const fmt = (d: Date) =>
+    d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      ...(spanYears ? { year: 'numeric' as const } : {}),
+    });
+
+  if (actualStart.getTime() === actualEnd.getTime()) {
+    if (actualStart.getTime() === today.getTime()) return 'Today';
+    return fmt(actualStart);
+  }
+
+  return `${fmt(actualStart)} – ${fmt(actualEnd)}`;
+}
+
 function parseAppointmentDay(s: string): Date {
   return startOfDay(new Date(s + 'T12:00:00'));
 }
@@ -185,10 +203,7 @@ function buildUsageHistoryBuckets(range: UsageHistoryRange, now: Date = new Date
       const actualStart = cur < rangeStart ? rangeStart : cur;
       const actualEnd = weekEnd > today ? today : weekEnd;
       if (actualStart <= actualEnd) {
-        const isTodayBucket = actualEnd.getTime() === today.getTime();
-        const label = isTodayBucket
-          ? 'Today'
-          : cur.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const label = format30dHistoryRangeLabel(actualStart, actualEnd, today);
         buckets.push({ label, start: actualStart, end: actualEnd });
       }
       cur = addDays(cur, 7);
