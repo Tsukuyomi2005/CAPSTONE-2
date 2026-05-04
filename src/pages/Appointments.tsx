@@ -192,12 +192,11 @@ export function Appointments() {
       return false;
     }
 
-    // Check overlapping bookings (confirmed or pending only)
+    // Check overlapping bookings (pending or approved — matches Convex + isSlotBooked below)
     const hasConflict = allAppointments.some(apt => {
       if (apt.vet !== vetName) return false;
       if (apt.date !== dateStr) return false;
-      // Only consider confirmed or pending appointments as booked
-      if (apt.status !== 'confirmed' && apt.status !== 'pending') return false;
+      if (apt.status !== 'pending' && apt.status !== 'approved') return false;
 
       const aptStart = parseTime(apt.time);
       const aptService = services.find(s => s.id === apt.serviceType);
@@ -402,7 +401,7 @@ export function Appointments() {
   };
 
   // A timeslot is considered "booked"/fully booked if:
-  // - There is at least one (pending or confirmed) appointment at that time, AND
+  // - There is at least one (pending or approved) appointment at that time, AND
   // - No vets are available for the selected service duration at that time
   const isSlotBooked = (time: string) => {
     if (!selectedDate || !selectedService) return false;
