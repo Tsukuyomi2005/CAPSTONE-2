@@ -42,12 +42,25 @@ export function VetDashboard() {
   // Filter appointments for this veterinarian
   const vetAppointments = appointments.filter(apt => apt.vet === vetName || apt.vet.includes(vetLastName || 'Smith'));
 
+  const getAppointmentStartMs = (date: string, time: string): number => {
+    const [hh, mm] = time.split(':').map(Number);
+    const dt = new Date(`${date}T00:00:00`);
+    dt.setHours(hh || 0, mm || 0, 0, 0);
+    return dt.getTime();
+  };
+
   // Calculate statistics
+  const nowMs = Date.now();
   const today = new Date().toISOString().split('T')[0];
   const todayAppointments = vetAppointments.filter(apt => apt.date === today);
   const pendingAppointments = vetAppointments.filter(apt => apt.status === 'pending');
   const upcomingAppointments = vetAppointments
-    .filter(apt => apt.status === 'approved' && apt.date >= today)
+    .filter(
+      (apt) =>
+        apt.status === 'approved' &&
+        apt.paymentStatus !== 'fully_paid' &&
+        getAppointmentStartMs(apt.date, apt.time) > nowMs
+    )
     .sort((a, b) => {
       const dateCompare = a.date.localeCompare(b.date);
       if (dateCompare !== 0) return dateCompare;

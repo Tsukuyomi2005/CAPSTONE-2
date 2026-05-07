@@ -31,7 +31,8 @@ export const list = query({
         v.literal("approved"),
         v.literal("rejected"),
         v.literal("cancelled"),
-        v.literal("rescheduled")
+        v.literal("rescheduled"),
+        v.literal("no_show")
       ),
       notes: v.optional(v.string()),
       serviceType: v.optional(v.string()),
@@ -77,6 +78,16 @@ export const list = query({
       ),
       ownerCancellationReasonCode: v.optional(v.string()),
       ownerCancellationReasonDetail: v.optional(v.string()),
+      noShowMarkedBy: v.optional(v.string()),
+      noShowMarkedAt: v.optional(v.string()),
+      noShowReasonCode: v.optional(
+        v.union(
+          v.literal("client_no_arrival"),
+          v.literal("arrived_too_late"),
+          v.literal("could_not_contact")
+        )
+      ),
+      noShowReasonDetail: v.optional(v.string()),
     })
   ),
   handler: async (ctx, args) => {
@@ -117,7 +128,8 @@ export const listByDate = query({
         v.literal("approved"),
         v.literal("rejected"),
         v.literal("cancelled"),
-        v.literal("rescheduled")
+        v.literal("rescheduled"),
+        v.literal("no_show")
       ),
       notes: v.optional(v.string()),
       serviceType: v.optional(v.string()),
@@ -163,6 +175,16 @@ export const listByDate = query({
       ),
       ownerCancellationReasonCode: v.optional(v.string()),
       ownerCancellationReasonDetail: v.optional(v.string()),
+      noShowMarkedBy: v.optional(v.string()),
+      noShowMarkedAt: v.optional(v.string()),
+      noShowReasonCode: v.optional(
+        v.union(
+          v.literal("client_no_arrival"),
+          v.literal("arrived_too_late"),
+          v.literal("could_not_contact")
+        )
+      ),
+      noShowReasonDetail: v.optional(v.string()),
     })
   ),
   handler: async (ctx, args) => {
@@ -191,7 +213,8 @@ export const add = mutation({
       v.literal("approved"),
       v.literal("rejected"),
       v.literal("cancelled"),
-      v.literal("rescheduled")
+      v.literal("rescheduled"),
+      v.literal("no_show")
     ),
     notes: v.optional(v.string()),
     serviceType: v.optional(v.string()),
@@ -231,6 +254,27 @@ const OWNER_CANCEL_REASON_CODES = new Set([
   "other",
 ]);
 
+const NO_SHOW_REASON_CODES = new Set([
+  "client_no_arrival",
+  "arrived_too_late",
+  "could_not_contact",
+]);
+
+function computeNoShowGraceMinutes(serviceDurationMin: number): number {
+  const halfDuration = Math.round(serviceDurationMin * 0.5);
+  return Math.max(5, Math.min(15, halfDuration));
+}
+
+/**
+ * Interpret appointment date/time in clinic local time (UTC+08:00 / Asia-Manila)
+ * to avoid server-runtime timezone drift.
+ */
+function clinicDateTimeMs(dateStr: string, timeStr: string): number {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hh, mm] = timeStr.split(":").map(Number);
+  return Date.UTC(year, (month ?? 1) - 1, day ?? 1, (hh ?? 0) - 8, mm ?? 0, 0, 0);
+}
+
 /**
  * Update an appointment
  */
@@ -251,7 +295,8 @@ export const update = mutation({
         v.literal("approved"),
         v.literal("rejected"),
         v.literal("cancelled"),
-        v.literal("rescheduled")
+        v.literal("rescheduled"),
+        v.literal("no_show")
       )
     ),
     notes: v.optional(v.string()),
@@ -283,6 +328,16 @@ export const update = mutation({
     }))),
     ownerCancellationReasonCode: v.optional(v.string()),
     ownerCancellationReasonDetail: v.optional(v.string()),
+    noShowMarkedBy: v.optional(v.string()),
+    noShowMarkedAt: v.optional(v.string()),
+    noShowReasonCode: v.optional(
+      v.union(
+        v.literal("client_no_arrival"),
+        v.literal("arrived_too_late"),
+        v.literal("could_not_contact")
+      )
+    ),
+    noShowReasonDetail: v.optional(v.string()),
     cancelSource: v.optional(
       v.union(v.literal("owner"), v.literal("admin")),
     ),
@@ -345,6 +400,67 @@ export const update = mutation({
         appointmentId: id,
       });
     }
+
+    return null;
+  },
+});
+
+/**
+ * Mark appointment as no-show (vet flow).
+ * Applies grace-time rule:
+ * grace = 50% of service duration, min 5 mins, max 15 mins.
+ */
+export const markNoShow = mutation({
+  args: {
+    id: v.id("appointments"),
+    markedBy: v.string(),
+    reasonCode: v.union(
+      v.literal("client_no_arrival"),
+      v.literal("arrived_too_late"),
+      v.literal("could_not_contact")
+    ),
+    reasonDetail: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const apt = await ctx.db.get(args.id);
+    if (!apt) throw new Error("Appointment not found");
+
+    if (apt.status !== "approved") {
+      throw new Error("Only confirmed appointments can be marked as no-show");
+    }
+    if (apt.paymentStatus === "fully_paid") {
+      throw new Error("Completed appointments cannot be marked as no-show");
+    }
+    if (!NO_SHOW_REASON_CODES.has(args.reasonCode)) {
+      throw new Error("Invalid no-show reason");
+    }
+
+    let serviceDurationMin = 30;
+    if (apt.serviceType) {
+      try {
+        const svc = await ctx.db.get(apt.serviceType as Id<"services">);
+        if (svc?.durationMinutes != null && svc.durationMinutes > 0) {
+          serviceDurationMin = svc.durationMinutes;
+        }
+      } catch {
+        // Fall back to default duration.
+      }
+    }
+
+    const graceMinutes = computeNoShowGraceMinutes(serviceDurationMin);
+    const noShowAllowedAtMs = clinicDateTimeMs(apt.date, apt.time) + graceMinutes * 60_000;
+    if (Date.now() < noShowAllowedAtMs) {
+      throw new Error(`No-show can be marked after ${graceMinutes} minute(s) grace period`);
+    }
+
+    await ctx.db.patch(args.id, {
+      status: "no_show",
+      noShowMarkedBy: args.markedBy,
+      noShowMarkedAt: new Date().toISOString(),
+      noShowReasonCode: args.reasonCode,
+      noShowReasonDetail: args.reasonDetail?.trim() || undefined,
+    });
 
     return null;
   },

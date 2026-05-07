@@ -86,6 +86,9 @@ export function VetMyAppointments() {
       // Confirmed (approved but not fully paid) - show green
       return 'bg-green-50 border-green-200 hover:bg-green-100';
     }
+    if (appointment.status === 'no_show') {
+      return 'bg-orange-50 border-orange-200 hover:bg-orange-100';
+    }
     if (appointment.status === 'rejected') {
       return 'bg-red-50 border-red-200 hover:bg-red-100';
     }
@@ -115,6 +118,13 @@ export function VetMyAppointments() {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const getAppointmentStartMs = (date: string, time: string): number => {
+    const [hh, mm] = time.split(':').map(Number);
+    const dt = new Date(`${date}T00:00:00`);
+    dt.setHours(hh || 0, mm || 0, 0, 0);
+    return dt.getTime();
   };
 
   // Get appointments for a specific date for this veterinarian
@@ -182,16 +192,23 @@ export function VetMyAppointments() {
       confirmed: allVetAppointments.filter(a => a.status === 'approved' && a.paymentStatus !== 'fully_paid').length,
       completed: allVetAppointments.filter(a => a.status === 'approved' && a.paymentStatus === 'fully_paid').length,
       cancelled: allVetAppointments.filter(a => a.status === 'cancelled').length,
+      noShow: allVetAppointments.filter(a => a.status === 'no_show').length,
     };
   };
 
   const statusCounts = getStatusCounts();
 
-  // Get upcoming appointments (approved appointments with date >= today)
+  // Get upcoming appointments (approved by admin, not fully paid, and in the future)
   const upcomingAppointments = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const nowMs = Date.now();
     return appointments
-      .filter(apt => apt.vet === currentVetName && apt.status === 'approved' && apt.date >= today)
+      .filter(
+        (apt) =>
+          apt.vet === currentVetName &&
+          apt.status === 'approved' &&
+          apt.paymentStatus !== 'fully_paid' &&
+          getAppointmentStartMs(apt.date, apt.time) > nowMs
+      )
       .sort((a, b) => {
         const dateCompare = a.date.localeCompare(b.date);
         if (dateCompare !== 0) return dateCompare;
@@ -293,6 +310,16 @@ export function VetMyAppointments() {
             >
               Cancelled ({statusCounts.cancelled})
             </button>
+            <button
+              onClick={() => setSelectedStatus('no_show')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                selectedStatus === 'no_show'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+              }`}
+            >
+              No-show ({statusCounts.noShow})
+            </button>
           </div>
         </div>
         <div className="p-6 overflow-x-auto">
@@ -345,6 +372,11 @@ export function VetMyAppointments() {
                                 <span className="text-gray-700 ml-1">- {getServiceName(apt.serviceType)}</span>
                               )}
                             </div>
+                            {apt.status === 'no_show' && (
+                              <div className="mt-1 inline-flex rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-800">
+                                No-show
+                              </div>
+                            )}
                           </div>
                         ))}
                         {appointmentCount === 0 && (

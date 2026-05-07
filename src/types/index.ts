@@ -22,7 +22,7 @@ export interface Appointment {
   time: string;
   reason?: string;
   vet: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'rescheduled';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'rescheduled' | 'no_show';
   notes?: string;
   serviceType?: string;
   price?: number;
@@ -53,6 +53,10 @@ export interface Appointment {
   }>;
   ownerCancellationReasonCode?: string;
   ownerCancellationReasonDetail?: string;
+  noShowMarkedBy?: string;
+  noShowMarkedAt?: string;
+  noShowReasonCode?: 'client_no_arrival' | 'arrived_too_late' | 'could_not_contact';
+  noShowReasonDetail?: string;
 }
 
 export interface PetAllergyEntry {

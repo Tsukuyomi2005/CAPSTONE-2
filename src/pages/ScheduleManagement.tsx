@@ -116,8 +116,10 @@ export function ScheduleManagement() {
 
   const handleRescheduleFromWeeklyDetails = () => {
     if (!weeklyDetailAppointment) return;
-    if (weeklyDetailAppointment.status === 'cancelled' || weeklyDetailAppointment.status === 'rejected') {
-      toast.error('Cannot reschedule a cancelled or rejected appointment');
+    const s = weeklyDetailAppointment.status;
+    const isCompleted = weeklyDetailAppointment.status === 'approved' && weeklyDetailAppointment.paymentStatus === 'fully_paid';
+    if (s !== 'pending' && !(!isCompleted && s === 'approved')) {
+      toast.error('Only pending or confirmed (not completed) appointments can be rescheduled');
       return;
     }
     const apt = weeklyDetailAppointment;
@@ -245,6 +247,9 @@ export function ScheduleManagement() {
     }
     if (appointment.status === 'rescheduled') {
       return 'bg-purple-50 border-purple-200 hover:bg-purple-100';
+    }
+    if (appointment.status === 'no_show') {
+      return 'bg-orange-50 border-orange-200 hover:bg-orange-100';
     }
     // Default
     return 'bg-gray-50 border-gray-200 hover:bg-gray-100';
@@ -908,8 +913,9 @@ export function ScheduleManagement() {
 
               <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-gray-200 bg-white p-6">
                 {canRescheduleFromWeeklyGrid &&
-                  weeklyDetailAppointment.status !== 'cancelled' &&
-                  weeklyDetailAppointment.status !== 'rejected' && (
+                  (weeklyDetailAppointment.status === 'pending' ||
+                    (weeklyDetailAppointment.status === 'approved' &&
+                      weeklyDetailAppointment.paymentStatus !== 'fully_paid')) && (
                     <button
                       type="button"
                       onClick={handleRescheduleFromWeeklyDetails}

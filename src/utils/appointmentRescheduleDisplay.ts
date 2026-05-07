@@ -22,6 +22,7 @@ export function getAppointmentStatusLabel(appointment: Appointment): string {
   }
   if (appointment.status === 'rejected') return 'Rejected';
   if (appointment.status === 'rescheduled') return 'Rescheduled';
+  if (appointment.status === 'no_show') return 'No-show';
   return appointment.status;
 }
 
@@ -43,6 +44,7 @@ export function getAppointmentStatusColorClass(appointment: Appointment): string
   }
   if (appointment.status === 'rejected') return 'bg-red-100 text-red-800';
   if (appointment.status === 'rescheduled') return 'bg-purple-100 text-purple-800';
+  if (appointment.status === 'no_show') return 'bg-orange-100 text-orange-800';
   return 'bg-gray-100 text-gray-800';
 }
 

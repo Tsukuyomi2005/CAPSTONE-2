@@ -85,6 +85,21 @@ export function Dashboard() {
   }).sort((a, b) => a.time.localeCompare(b.time));
   const pendingAppointments = appointments.filter(apt => apt.status === 'pending');
   const myAppointments = hasFullAccess ? appointments : appointments.filter(apt => apt.status === 'approved');
+  const getAppointmentStartMs = (date: string, time: string): number => {
+    const [hh, mm] = time.split(':').map(Number);
+    const dt = new Date(`${date}T00:00:00`);
+    dt.setHours(hh || 0, mm || 0, 0, 0);
+    return dt.getTime();
+  };
+  const isUpcomingApprovedAppointment = (apt: Appointment): boolean =>
+    apt.status === 'approved' &&
+    apt.paymentStatus !== 'fully_paid' &&
+    getAppointmentStartMs(apt.date, apt.time) > Date.now();
+  const ownerUpcomingAppointments = !hasFullAccess
+    ? myAppointments
+        .filter(isUpcomingApprovedAppointment)
+        .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
+    : [];
 
   // Format time to 12-hour format
   const formatTime12Hour = (time24: string): string => {
@@ -220,7 +235,7 @@ export function Dashboard() {
       name: hasFullAccess ? "Today's Appointments" : 'Upcoming Appointments',
       value: hasFullAccess
         ? todayAppointments.length.toString()
-        : myAppointments.length.toString(),
+        : ownerUpcomingAppointments.length.toString(),
       icon: Calendar,
       color: hasFullAccess ? 'text-green-600 bg-green-100' : 'text-purple-600 bg-purple-100',
     },
@@ -236,10 +251,7 @@ export function Dashboard() {
 
   // Engaging pet owner dashboard layout
   if (!hasFullAccess) {
-    const upcomingAppointments = myAppointments
-      .filter((apt) => new Date(apt.date) >= new Date())
-      .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))
-      .slice(0, 3);
+    const upcomingAppointments = ownerUpcomingAppointments.slice(0, 3);
 
     const hasPets = records.length > 0;
 

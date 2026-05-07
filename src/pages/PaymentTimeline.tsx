@@ -65,9 +65,15 @@ interface Transaction {
   amount: number;
   transactionType: TransactionType;
   paymentMethod: PaymentMethod;
-  status: 'Paid' | 'Pending' | 'Failed';
+  status: 'Paid' | 'Paid (Forfeited)' | 'Pending' | 'Failed';
   appointment: Appointment;
 }
+
+const NO_SHOW_REASON_LABELS: Record<string, string> = {
+  client_no_arrival: 'Client did not arrive',
+  arrived_too_late: 'Arrived too late and could not be accommodated',
+  could_not_contact: 'Could not be contacted at appointment time',
+};
 
 // Generate transactions from appointments
 const generateTransactions = (
@@ -117,6 +123,26 @@ const generateTransactions = (
     // Determine transaction type and create transactions
     const depositAmount = Math.round(appointment.price * 0.3);
     const remainingAmount = appointment.price - depositAmount;
+
+    if (appointment.status === 'no_show') {
+      if (appointment.paymentStatus === 'down_payment_paid' || appointment.paymentStatus === 'fully_paid') {
+        transactions.push({
+          id: `${appointment.id}-forfeiture`,
+          appointmentId: appointment.id,
+          appointmentIdFormatted,
+          service: serviceName,
+          date: appointment.date,
+          time: appointment.time,
+          amount: depositAmount,
+          transactionType: 'Deposit Payment',
+          paymentMethod,
+          status: 'Paid (Forfeited)',
+          appointment,
+        });
+      }
+      // No-show appointments should not produce pending remaining balance rows.
+      return;
+    }
 
     if (appointment.paymentStatus === 'down_payment_paid') {
       // Deposit payment was made online, remaining balance is pending at clinic
@@ -380,6 +406,7 @@ export function PaymentTimeline() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Paid': return 'bg-green-100 text-green-800';
+      case 'Paid (Forfeited)': return 'bg-orange-100 text-orange-800';
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
       case 'Failed': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -606,9 +633,14 @@ export function PaymentTimeline() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
-                        {transaction.status}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
+                          {transaction.status}
+                        </span>
+                        {transaction.status === 'Paid (Forfeited)' && (
+                          <span className="text-[11px] text-orange-700">No-show policy applied</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
@@ -701,6 +733,9 @@ export function PaymentTimeline() {
                     <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedTransaction.status)}`}>
                       {selectedTransaction.status}
                     </span>
+                    {selectedTransaction.status === 'Paid (Forfeited)' && (
+                      <p className="mt-1 text-xs text-orange-700">No-show policy applied</p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Pet Name</p>
@@ -718,6 +753,31 @@ export function PaymentTimeline() {
                       <pre className="text-xs text-gray-700">
                         {JSON.stringify(selectedTransaction.appointment.paymentData, null, 2)}
                       </pre>
+                    </div>
+                  </div>
+                )}
+                {selectedTransaction.appointment.status === 'no_show' && (
+                  <div className="pt-4 border-t">
+                    <p className="text-sm text-gray-600 mb-2">No-show Details</p>
+                    <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg text-sm text-orange-900 space-y-1">
+                      <p>
+                        <span className="font-medium">Reason:</span>{' '}
+                        {selectedTransaction.appointment.noShowReasonCode
+                          ? NO_SHOW_REASON_LABELS[selectedTransaction.appointment.noShowReasonCode] ??
+                            selectedTransaction.appointment.noShowReasonCode
+                          : '—'}
+                      </p>
+                      <p>
+                        <span className="font-medium">Marked at:</span>{' '}
+                        {selectedTransaction.appointment.noShowMarkedAt
+                          ? new Date(selectedTransaction.appointment.noShowMarkedAt).toLocaleString('en-US')
+                          : '—'}
+                      </p>
+                      {selectedTransaction.appointment.noShowReasonDetail && (
+                        <p>
+                          <span className="font-medium">Note:</span> {selectedTransaction.appointment.noShowReasonDetail}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

@@ -17,7 +17,7 @@ function convertAppointment(doc: {
   time: string;
   reason?: string;
   vet: string;
-  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'rescheduled';
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'rescheduled' | 'no_show';
   notes?: string;
   serviceType?: string;
   price?: number;
@@ -39,6 +39,10 @@ function convertAppointment(doc: {
   rescheduleHistory?: Appointment['rescheduleHistory'];
   ownerCancellationReasonCode?: string;
   ownerCancellationReasonDetail?: string;
+  noShowMarkedBy?: string;
+  noShowMarkedAt?: string;
+  noShowReasonCode?: 'client_no_arrival' | 'arrived_too_late' | 'could_not_contact';
+  noShowReasonDetail?: string;
 }): Appointment {
   return {
     id: doc._id,
@@ -62,6 +66,10 @@ function convertAppointment(doc: {
     rescheduleHistory: doc.rescheduleHistory,
     ownerCancellationReasonCode: doc.ownerCancellationReasonCode,
     ownerCancellationReasonDetail: doc.ownerCancellationReasonDetail,
+    noShowMarkedBy: doc.noShowMarkedBy,
+    noShowMarkedAt: doc.noShowMarkedAt,
+    noShowReasonCode: doc.noShowReasonCode,
+    noShowReasonDetail: doc.noShowReasonDetail,
   };
 }
 
@@ -113,6 +121,8 @@ export function useAppointmentStore() {
   const deleteAppointmentMutation = useMutation(api.appointments.remove);
   // @ts-ignore
   const rescheduleAppointmentMutation = useMutation(api.appointments.reschedule);
+  // @ts-ignore
+  const markNoShowMutation = useMutation(api.appointments.markNoShow);
 
   const appointments: Appointment[] = appointmentsData?.map(convertAppointment) ?? [];
   const allAppointments: Appointment[] = allAppointmentsData?.map(convertAppointment) ?? [];
@@ -153,7 +163,7 @@ export function useAppointmentStore() {
       time?: string;
       reason?: string;
       vet?: string;
-      status?: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'rescheduled';
+      status?: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'rescheduled' | 'no_show';
       notes?: string;
       serviceType?: string;
       price?: number;
@@ -173,6 +183,10 @@ export function useAppointmentStore() {
       }>;
       ownerCancellationReasonCode?: string;
       ownerCancellationReasonDetail?: string;
+      noShowMarkedBy?: string;
+      noShowMarkedAt?: string;
+      noShowReasonCode?: 'client_no_arrival' | 'arrived_too_late' | 'could_not_contact';
+      noShowReasonDetail?: string;
     } = {
       id: id as Id<"appointments">,
     };
@@ -198,6 +212,10 @@ export function useAppointmentStore() {
     if (updates.ownerCancellationReasonDetail !== undefined) {
       updateData.ownerCancellationReasonDetail = updates.ownerCancellationReasonDetail;
     }
+    if (updates.noShowMarkedBy !== undefined) updateData.noShowMarkedBy = updates.noShowMarkedBy;
+    if (updates.noShowMarkedAt !== undefined) updateData.noShowMarkedAt = updates.noShowMarkedAt;
+    if (updates.noShowReasonCode !== undefined) updateData.noShowReasonCode = updates.noShowReasonCode;
+    if (updates.noShowReasonDetail !== undefined) updateData.noShowReasonDetail = updates.noShowReasonDetail;
     if (options?.cancelSource !== undefined) updateData.cancelSource = options.cancelSource;
 
     await updateAppointmentMutation(updateData);
@@ -229,6 +247,20 @@ export function useAppointmentStore() {
     });
   };
 
+  const markNoShow = async (args: {
+    id: string;
+    markedBy: string;
+    reasonCode: 'client_no_arrival' | 'arrived_too_late' | 'could_not_contact';
+    reasonDetail?: string;
+  }) => {
+    await markNoShowMutation({
+      id: args.id as Id<"appointments">,
+      markedBy: args.markedBy,
+      reasonCode: args.reasonCode,
+      reasonDetail: args.reasonDetail,
+    });
+  };
+
   return {
     appointments,
     allAppointments,
@@ -238,5 +270,6 @@ export function useAppointmentStore() {
     updateAppointment,
     deleteAppointment,
     rescheduleAppointment,
+    markNoShow,
   };
 }

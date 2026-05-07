@@ -4,6 +4,13 @@ import { useAppointmentStore } from '../stores/appointmentStore';
 import { useServiceStore } from '../stores/serviceStore';
 import { LogItemsUsedModal } from '../components/LogItemsUsedModal';
 import type { Appointment } from '../types';
+import { toast } from 'sonner';
+
+const NO_SHOW_REASON_OPTIONS = [
+  { value: 'client_no_arrival', label: 'Client did not arrive' },
+  { value: 'arrived_too_late', label: 'Arrived too late and could not be accommodated' },
+  { value: 'could_not_contact', label: 'Could not be contacted at appointment time' },
+] as const;
 
 const MedicationIcon = ({ className }: { className?: string }) => (
   <img
@@ -76,7 +83,7 @@ const getVetName = () => {
 };
 
 export function VetAppointmentHistory() {
-  const { appointments } = useAppointmentStore();
+  const { appointments, markNoShow } = useAppointmentStore();
   const { services } = useServiceStore();
   
   const currentVetName = useMemo(() => getVetName(), []);
@@ -96,6 +103,13 @@ export function VetAppointmentHistory() {
   const [showLogItemsModal, setShowLogItemsModal] = useState(false);
   const [selectedAppointmentForStatus, setSelectedAppointmentForStatus] = useState<Appointment | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedAppointmentForNoShow, setSelectedAppointmentForNoShow] = useState<Appointment | null>(null);
+  const [showNoShowModal, setShowNoShowModal] = useState(false);
+  const [noShowReasonCode, setNoShowReasonCode] = useState<(typeof NO_SHOW_REASON_OPTIONS)[number]['value']>(
+    'client_no_arrival'
+  );
+  const [noShowReasonDetail, setNoShowReasonDetail] = useState('');
+  const [savingNoShow, setSavingNoShow] = useState(false);
 
   // Filter appointments for this veterinarian
   const vetAppointments = useMemo(() => {
@@ -120,6 +134,8 @@ export function VetAppointmentHistory() {
         filtered = filtered.filter(apt => apt.status === 'approved' && apt.paymentStatus !== 'fully_paid');
       } else if (statusFilter === 'completed') {
         filtered = filtered.filter(apt => apt.status === 'approved' && apt.paymentStatus === 'fully_paid');
+      } else if (statusFilter === 'no_show') {
+        filtered = filtered.filter(apt => apt.status === 'no_show');
       } else {
         filtered = filtered.filter(apt => apt.status === statusFilter);
       }
@@ -144,40 +160,62 @@ export function VetAppointmentHistory() {
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const total = vetAppointments.length;
-    
-    const completed = vetAppointments.filter(apt => 
-      apt.status === 'approved' && apt.paymentStatus === 'fully_paid'
-    ).length;
-    
-    const cancelled = vetAppointments.filter(apt => 
-      apt.status === 'cancelled'
-    ).length;
-    
-    // No show rate: appointments that were approved but never completed (and not cancelled)
-    const noShow = vetAppointments.filter(apt => {
-      const aptDate = new Date(apt.date);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      aptDate.setHours(0, 0, 0, 0);
-      
-      return apt.status === 'approved' && 
-             apt.paymentStatus !== 'fully_paid' &&
-             apt.status !== 'cancelled' &&
-             aptDate < today;
-    }).length;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    // Calculate percentage changes (mock data for now)
-    const totalChange = total > 0 ? 12 : 0;
-    const completedChange = completed > 0 ? 8 : 0;
-    const cancelledChange = cancelled > 0 ? -3 : 0;
-    const noShowChange = noShow > 0 ? -5 : 0;
+    const parseYmd = (ymd: string): Date => {
+      const [y, m, d] = ymd.split('-').map(Number);
+      const dt = new Date(y, (m ?? 1) - 1, d ?? 1);
+      dt.setHours(0, 0, 0, 0);
+      return dt;
+    };
+
+    const isInMonth = (apt: Appointment, monthStart: Date, nextMonthStart: Date): boolean => {
+      const d = parseYmd(apt.date);
+      return d >= monthStart && d < nextMonthStart;
+    };
+
+    const isNoShow = (apt: Appointment): boolean => {
+      if (apt.status === 'no_show') return true;
+      if (apt.status !== 'approved') return false;
+      if (apt.paymentStatus === 'fully_paid') return false;
+      return parseYmd(apt.date) < today;
+    };
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const nextMonthStart = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+
+    const curMonthApts = vetAppointments.filter((apt) => isInMonth(apt, monthStart, nextMonthStart));
+    const prevMonthApts = vetAppointments.filter((apt) => isInMonth(apt, prevMonthStart, monthStart));
+
+    const curTotal = curMonthApts.length;
+    const prevTotal = prevMonthApts.length;
+
+    const curCompleted = curMonthApts.filter((apt) => apt.status === 'approved' && apt.paymentStatus === 'fully_paid').length;
+    const prevCompleted = prevMonthApts.filter((apt) => apt.status === 'approved' && apt.paymentStatus === 'fully_paid').length;
+
+    const curCancelled = curMonthApts.filter((apt) => apt.status === 'cancelled').length;
+    const prevCancelled = prevMonthApts.filter((apt) => apt.status === 'cancelled').length;
+
+    const curNoShow = curMonthApts.filter(isNoShow).length;
+    const prevNoShow = prevMonthApts.filter(isNoShow).length;
+
+    const pctChange = (cur: number, prev: number): number => {
+      if (prev === 0) return cur > 0 ? 100 : 0;
+      return Math.round(((cur - prev) / prev) * 100);
+    };
+
+    const totalChange = pctChange(curTotal, prevTotal);
+    const completedChange = pctChange(curCompleted, prevCompleted);
+    const cancelledChange = pctChange(curCancelled, prevCancelled);
+    const noShowChange = pctChange(curNoShow, prevNoShow);
 
     return {
-      total,
-      completed,
-      cancelled,
-      noShow,
+      total: curTotal,
+      completed: curCompleted,
+      cancelled: curCancelled,
+      noShow: curNoShow,
       totalChange,
       completedChange,
       cancelledChange,
@@ -216,6 +254,7 @@ export function VetAppointmentHistory() {
       // Confirmed (approved but not fully paid) - show green
       return 'bg-green-100 text-green-800';
     }
+    if (appointment.status === 'no_show') return 'bg-orange-100 text-orange-800';
     return 'bg-gray-100 text-gray-800';
   };
 
@@ -228,7 +267,67 @@ export function VetAppointmentHistory() {
       }
       return 'Confirmed';
     }
+    if (appointment.status === 'no_show') return 'No-show';
     return appointment.status;
+  };
+
+  const getAppointmentStartMs = (date: string, time: string): number => {
+    const [hh, mm] = time.split(':').map(Number);
+    const dt = new Date(`${date}T00:00:00`);
+    dt.setHours(hh || 0, mm || 0, 0, 0);
+    return dt.getTime();
+  };
+
+  const getServiceDurationMinutes = (appointment: Appointment): number => {
+    const svc = services.find((s) => s.id === appointment.serviceType);
+    return svc?.durationMinutes ?? 30;
+  };
+
+  const getNoShowGraceMinutes = (serviceDurationMinutes: number): number => {
+    const halfDuration = Math.round(serviceDurationMinutes * 0.5);
+    return Math.max(5, Math.min(15, halfDuration));
+  };
+
+  const canMarkNoShow = (appointment: Appointment): boolean => {
+    if (appointment.status !== 'approved') return false;
+    if (appointment.paymentStatus === 'fully_paid') return false;
+    const graceMinutes = getNoShowGraceMinutes(getServiceDurationMinutes(appointment));
+    return Date.now() >= getAppointmentStartMs(appointment.date, appointment.time) + graceMinutes * 60 * 1000;
+  };
+
+  const openNoShowModal = (appointment: Appointment) => {
+    setSelectedAppointmentForNoShow(appointment);
+    setNoShowReasonCode('client_no_arrival');
+    setNoShowReasonDetail('');
+    setShowNoShowModal(true);
+  };
+
+  const closeNoShowModal = () => {
+    setShowNoShowModal(false);
+    setSelectedAppointmentForNoShow(null);
+    setNoShowReasonCode('client_no_arrival');
+    setNoShowReasonDetail('');
+  };
+
+  const handleMarkNoShow = async () => {
+    if (!selectedAppointmentForNoShow) return;
+    setSavingNoShow(true);
+    try {
+      await markNoShow({
+        id: selectedAppointmentForNoShow.id,
+        markedBy: currentVetName,
+        reasonCode: noShowReasonCode,
+        reasonDetail: noShowReasonDetail.trim() || undefined,
+      });
+      toast.success('Appointment marked as no-show.');
+      closeNoShowModal();
+    } catch (error) {
+      console.error('Failed to mark no-show:', error);
+      const message = error instanceof Error ? error.message : 'Failed to mark appointment as no-show.';
+      toast.error(message);
+    } finally {
+      setSavingNoShow(false);
+    }
   };
 
   const handleResetFilters = () => {
@@ -344,7 +443,7 @@ export function VetAppointmentHistory() {
               <p className="text-3xl font-bold text-gray-900">{stats.noShow}</p>
               <p className="text-xs text-gray-500 mt-1">Clients who didn't show up</p>
               {stats.noShowChange !== 0 && (
-                <div className={`flex items-center gap-1 mt-1 text-xs ${stats.noShowChange > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`flex items-center gap-1 mt-1 text-xs ${stats.noShowChange > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   {stats.noShowChange > 0 ? (
                     <TrendingUp className="h-3 w-3" />
                   ) : (
@@ -397,6 +496,7 @@ export function VetAppointmentHistory() {
               <option value="confirmed">Confirmed</option>
               <option value="completed">Completed</option>
               <option value="cancelled">Cancelled</option>
+              <option value="no_show">No-show</option>
             </select>
           </div>
           <div>
@@ -492,6 +592,16 @@ export function VetAppointmentHistory() {
                             <NotebookPen className="h-5 w-5" />
                           </button>
                         )}
+                        {canMarkNoShow(apt) && (
+                          <button
+                            onClick={() => openNoShowModal(apt)}
+                            className="inline-flex items-center gap-1 rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800 transition-colors hover:bg-orange-200"
+                            title="Mark as No-show"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            <span>No-show</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -508,6 +618,72 @@ export function VetAppointmentHistory() {
         onClose={handleCloseLogItemsModal}
         appointment={selectedAppointmentForLogging}
       />
+
+      {/* No-show confirmation modal */}
+      {showNoShowModal && selectedAppointmentForNoShow && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <button type="button" className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={closeNoShowModal} />
+            <div className="relative z-10 w-full max-w-lg rounded-lg bg-white shadow-xl">
+              <div className="border-b p-6">
+                <h3 className="text-lg font-semibold text-gray-900">Mark as No-show</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  {selectedAppointmentForNoShow.ownerName} - {selectedAppointmentForNoShow.petName}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {formatDate(selectedAppointmentForNoShow.date)} at {formatTime12Hour(selectedAppointmentForNoShow.time)}
+                </p>
+              </div>
+              <div className="space-y-4 p-6">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Reason</label>
+                  <select
+                    value={noShowReasonCode}
+                    onChange={(e) =>
+                      setNoShowReasonCode(e.target.value as (typeof NO_SHOW_REASON_OPTIONS)[number]['value'])
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  >
+                    {NO_SHOW_REASON_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">Notes (optional)</label>
+                  <textarea
+                    value={noShowReasonDetail}
+                    onChange={(e) => setNoShowReasonDetail(e.target.value)}
+                    rows={3}
+                    placeholder="Add any extra context for the clinic staff."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 border-t p-4">
+                <button
+                  type="button"
+                  onClick={closeNoShowModal}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  disabled={savingNoShow}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleMarkNoShow}
+                  className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={savingNoShow}
+                >
+                  {savingNoShow ? 'Saving...' : 'Confirm No-show'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Item Usage Status Modal */}
       {showStatusModal && selectedAppointmentForStatus && (

@@ -54,13 +54,11 @@ const formatTime = (time24: string): string => {
   return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
 };
 
-// Check if appointment is upcoming (date is in the future)
+// Check if appointment is upcoming (admin-approved, not fully paid, and start time is in the future)
 const isUpcoming = (appointment: Appointment): boolean => {
-  const appointmentDate = new Date(appointment.date);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  appointmentDate.setHours(0, 0, 0, 0);
-  return appointmentDate >= today && appointment.status !== 'cancelled' && appointment.status !== 'rejected';
+  if (appointment.status !== 'approved') return false;
+  if (appointment.paymentStatus === 'fully_paid') return false;
+  return appointmentEndMs(appointment.date, appointment.time) > Date.now();
 };
 
 // Check if appointment is completed
@@ -413,9 +411,9 @@ export function MyAppointments() {
           <h2 className="text-xl font-semibold text-gray-900">Appointment History</h2>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="max-h-[min(32rem,calc(100dvh-22rem))] overflow-y-auto overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>

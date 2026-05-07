@@ -13,6 +13,14 @@ export function StaffPaymentManagement() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<'deposit' | 'full' | 'remaining' | null>(null);
 
+  const calculateDepositAmount = (price: number): number => {
+    return Math.round(price * 0.3);
+  };
+
+  const calculateRemainingAmount = (price: number): number => {
+    return price - calculateDepositAmount(price);
+  };
+
   // Get appointments with pending payments
   const pendingPaymentAppointments = useMemo(() => {
     return appointments.filter((apt: Appointment) => {
@@ -22,6 +30,15 @@ export function StaffPaymentManagement() {
              apt.price > 0 &&
              (apt.paymentStatus === 'pending' || apt.paymentStatus === 'down_payment_paid');
     });
+  }, [appointments]);
+
+  const noShowForfeitureAmount = useMemo(() => {
+    return appointments.reduce((sum, apt) => {
+      if (apt.status !== 'no_show') return sum;
+      if (!apt.price || apt.price <= 0) return sum;
+      if (apt.paymentStatus !== 'down_payment_paid' && apt.paymentStatus !== 'fully_paid') return sum;
+      return sum + calculateDepositAmount(apt.price);
+    }, 0);
   }, [appointments]);
 
   const formatDate = (dateStr: string): string => {
@@ -45,14 +62,6 @@ export function StaffPaymentManagement() {
     return service?.name || 'Unknown Service';
   };
 
-  const calculateDepositAmount = (price: number): number => {
-    return Math.round(price * 0.3);
-  };
-
-  const calculateRemainingAmount = (price: number): number => {
-    return price - calculateDepositAmount(price);
-  };
-
   const handleConfirmPaymentClick = (appointment: Appointment, type: 'deposit' | 'full' | 'remaining') => {
     setConfirmingPayment(appointment);
     setPaymentType(type);
@@ -63,6 +72,15 @@ export function StaffPaymentManagement() {
     if (!confirmingPayment || !paymentType) return;
 
     try {
+      const latest = appointments.find((apt) => apt.id === confirmingPayment.id);
+      if (!latest || latest.status === 'no_show') {
+        toast.error('Payment confirmation is locked for no-show appointments.');
+        setConfirmDialogOpen(false);
+        setConfirmingPayment(null);
+        setPaymentType(null);
+        return;
+      }
+
       let newPaymentStatus: 'down_payment_paid' | 'fully_paid';
       let paymentData = confirmingPayment.paymentData || {};
       
@@ -145,7 +163,7 @@ export function StaffPaymentManagement() {
       </div>
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-6 shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
@@ -191,6 +209,20 @@ export function StaffPaymentManagement() {
             </div>
             <div className="p-3 rounded-lg bg-green-100 text-green-600">
               <DollarSign className="h-6 w-6" />
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg p-6 shadow-sm border">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">No-show Forfeiture</p>
+              <p className="text-2xl font-bold text-orange-600 mt-1">
+                ₱{noShowForfeitureAmount.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-orange-100 text-orange-600">
+              <AlertCircle className="h-6 w-6" />
             </div>
           </div>
         </div>

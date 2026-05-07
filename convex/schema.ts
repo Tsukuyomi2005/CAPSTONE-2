@@ -30,7 +30,8 @@ const applicationTables = {
       v.literal("approved"),
       v.literal("rejected"),
       v.literal("cancelled"),
-      v.literal("rescheduled")
+      v.literal("rescheduled"),
+      v.literal("no_show")
     ),
     notes: v.optional(v.string()),
     serviceType: v.optional(v.string()),
@@ -78,6 +79,16 @@ const applicationTables = {
     ),
     ownerCancellationReasonCode: v.optional(v.string()),
     ownerCancellationReasonDetail: v.optional(v.string()),
+    noShowMarkedBy: v.optional(v.string()),
+    noShowMarkedAt: v.optional(v.string()),
+    noShowReasonCode: v.optional(
+      v.union(
+        v.literal("client_no_arrival"),
+        v.literal("arrived_too_late"),
+        v.literal("could_not_contact")
+      )
+    ),
+    noShowReasonDetail: v.optional(v.string()),
   })
     .index("by_date", ["date"])
     .index("by_email", ["email"]),
