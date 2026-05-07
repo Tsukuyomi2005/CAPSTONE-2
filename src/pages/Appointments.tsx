@@ -48,6 +48,7 @@ export function Appointments() {
   const [paymentMethod, setPaymentMethod] = useState<'at_clinic' | 'online'>('at_clinic');
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
   const isWalkInBooking = role === 'vet' || role === 'staff';
+  const effectivePaymentMethod: 'at_clinic' | 'online' = isWalkInBooking ? paymentMethod : 'online';
 
   const handlePhoneChange = (e: ChangeEvent<HTMLInputElement>) => {
     const digitsOnly = e.target.value.replace(/\D/g, '').slice(0, 11);
@@ -537,7 +538,7 @@ export function Appointments() {
         email: '',
         reason: '',
       });
-      setPaymentMethod('at_clinic');
+      setPaymentMethod(isWalkInBooking ? 'at_clinic' : 'online');
       setShowPayment(false);
     } catch (error) {
       console.error('Failed to book appointment:', error);
@@ -591,7 +592,7 @@ export function Appointments() {
         email: '',
         reason: '',
       });
-      setPaymentMethod('at_clinic');
+      setPaymentMethod(isWalkInBooking ? 'at_clinic' : 'online');
     } catch (error) {
       console.error('Failed to book appointment:', error);
       toast.error('Failed to book appointment. Please try again.');
@@ -1089,7 +1090,7 @@ export function Appointments() {
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Down Payment Required:</span>
+                        <span className="text-gray-600">30% Deposit:</span>
                         <span className="font-semibold text-purple-600">
                           ₱{Math.round(selectedService.price * 0.3).toLocaleString()}
                         </span>
@@ -1107,61 +1108,52 @@ export function Appointments() {
             </div>
           )}
 
-          {/* Select Payment Method Section */}
+          {/* Payment Section */}
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Select Payment Method</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Pay Balance at Clinic / Pay in Cash */}
-              <button
-                onClick={() => setPaymentMethod('at_clinic')}
-                className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
-                  paymentMethod === 'at_clinic'
-                    ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
-                    : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <Building2 className={`h-6 w-6 mt-1 ${paymentMethod === 'at_clinic' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 mb-2">
-                      {role === 'owner' ? 'Pay Balance at Clinic' : 'Pay in Cash'}
-                    </h3>
-                    {selectedService && (
-                      <div className="text-sm text-gray-600 space-y-1">
-                        {role === 'owner' ? (
-                          <>
-                            <p>Pay the ₱{Math.round(selectedService.price * 0.3).toLocaleString()} deposit online now.</p>
-                            <p>Pay the remaining ₱{(selectedService.price - Math.round(selectedService.price * 0.3)).toLocaleString()} at the clinic on the day of your appointment.</p>
-                          </>
-                        ) : (
-                          <>
-                            <p>Pay the ₱{Math.round(selectedService.price * 0.3).toLocaleString()} deposit online now.</p>
-                            <p>Pay the remaining ₱{(selectedService.price - Math.round(selectedService.price * 0.3)).toLocaleString()} here on the day of the appointment.</p>
-                          </>
-                        )}
-                      </div>
-                    )}
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              {isWalkInBooking ? 'Select Payment Method' : 'Online Deposit Payment'}
+            </h2>
+            <div className={`grid grid-cols-1 ${isWalkInBooking ? 'md:grid-cols-2' : 'md:grid-cols-2'} gap-4`}>
+              {isWalkInBooking && (
+                <button
+                  onClick={() => setPaymentMethod('at_clinic')}
+                  className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
+                    effectivePaymentMethod === 'at_clinic'
+                      ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
+                      : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <Building2 className={`h-6 w-6 mt-1 ${effectivePaymentMethod === 'at_clinic' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 mb-2">Pay at Clinic</h3>
+                      {selectedService && (
+                        <div className="text-sm text-gray-600 space-y-1">
+                          <p>Collect the 30% deposit (₱{Math.round(selectedService.price * 0.3).toLocaleString()}) now.</p>
+                          <p>Collect the remaining ₱{(selectedService.price - Math.round(selectedService.price * 0.3)).toLocaleString()} after the appointment.</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </button>
+                </button>
+              )}
 
-              {/* Pay Online */}
               <button
                 onClick={() => setPaymentMethod('online')}
-                className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${
-                  paymentMethod === 'online'
+                className={`p-4 rounded-lg border-2 text-left transition-all duration-200 ${!isWalkInBooking ? 'md:col-span-1' : ''} ${
+                  effectivePaymentMethod === 'online'
                     ? 'border-[#5a3720] bg-[#fbe9d7] shadow-lg shadow-[#6b4423]/30 ring-1 ring-[#8a5a3b]/25'
                     : 'border-[#5C4033]/35 bg-[#fffaf5] hover:border-[#6b4423]/60 hover:bg-[#fff3e6]'
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <Smartphone className={`h-6 w-6 mt-1 ${paymentMethod === 'online' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
+                  <Smartphone className={`h-6 w-6 mt-1 ${effectivePaymentMethod === 'online' ? 'text-[#6b4423]' : 'text-gray-600'}`} />
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900 mb-2">Pay Online</h3>
                     {selectedService && (
                       <div className="text-sm text-gray-600 space-y-1">
-                        <p>Pay the full amount or minimum ₱{Math.round(selectedService.price * 0.3).toLocaleString()} deposit via GCash/PayMaya and upload proof.</p>
-                        <p className="text-xs text-gray-500">Remaining balance (₱{(selectedService.price - Math.round(selectedService.price * 0.3)).toLocaleString()}) can also be paid online if they choose.</p>
+                        <p>Pay the 30% deposit of ₱{Math.round(selectedService.price * 0.3).toLocaleString()} via GCash/PayMaya.</p>
+                        <p className="text-xs text-gray-500">Once the deposit is paid, your slot is secured and confirmed by the clinic.</p>
                       </div>
                     )}
                   </div>
@@ -1199,7 +1191,7 @@ export function Appointments() {
               Previous
             </button>
             <button
-              onClick={paymentMethod === 'online' ? handleProceedToPayment : handleBookAppointment}
+              onClick={effectivePaymentMethod === 'online' ? handleProceedToPayment : handleBookAppointment}
               disabled={!formData.petName || !formData.ownerName || !formData.phone || (role === 'owner' && !formData.email)}
               className="px-6 py-2 bg-[#6b4423] text-white rounded-lg hover:bg-[#5a3720] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
