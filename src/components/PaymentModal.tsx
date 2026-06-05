@@ -1,6 +1,7 @@
 import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
 import { X, CreditCard, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
+import { generateReferenceNumber } from '../utils/referenceNumber';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -36,18 +37,19 @@ export function PaymentModal({ isOpen, onClose, amount, serviceType, onPaymentSu
 
     // Simulate payment processing
     setTimeout(() => {
+      const timestamp = new Date().toISOString();
       const paymentData = {
         method: paymentMethod,
         phoneNumber,
         amount,
         transactionId: `TXN-${Date.now()}`,
-        timestamp: new Date().toISOString()
+        referenceNumber: generateReferenceNumber(timestamp),
+        timestamp,
       };
 
       onPaymentSuccess(paymentData);
       setIsProcessing(false);
       setPhoneNumber('');
-      toast.success(`Payment successful via ${paymentMethod.toUpperCase()}!`);
     }, 2000);
   };
 

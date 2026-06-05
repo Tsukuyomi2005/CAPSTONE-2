@@ -1,14 +1,29 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useMutation } from 'convex/react';
 import { CreditCard, DollarSign, Calendar, Clock, User, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAppointmentStore } from '../stores/appointmentStore';
 import { useServiceStore } from '../stores/serviceStore';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { toast } from 'sonner';
 import type { Appointment } from '../types';
+import { resolveReferenceNumber } from '../utils/referenceNumber';
+// @ts-ignore - API types will be generated when Convex syncs
+import { api } from '../../convex/_generated/api';
 
 export function StaffPaymentManagement() {
   const { appointments, updateAppointment } = useAppointmentStore();
   const { services } = useServiceStore();
+  // @ts-ignore
+  const backfillReferenceNumbers = useMutation(api.appointments.backfillPaymentReferenceNumbers);
+
+  useEffect(() => {
+    if (sessionStorage.getItem('payment_reference_backfill_done')) return;
+    backfillReferenceNumbers({})
+      .then(() => sessionStorage.setItem('payment_reference_backfill_done', '1'))
+      .catch(() => {
+        // Display still resolves reference numbers client-side if backfill is unavailable.
+      });
+  }, [backfillReferenceNumbers]);
   const [confirmingPayment, setConfirmingPayment] = useState<Appointment | null>(null);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<'deposit' | 'full' | 'remaining' | null>(null);
@@ -247,6 +262,10 @@ export function StaffPaymentManagement() {
                 const depositAmount = calculateDepositAmount(apt.price || 0);
                 const remainingAmount = calculateRemainingAmount(apt.price || 0);
                 const isPartialPayment = apt.paymentStatus === 'down_payment_paid';
+                const referenceNumber = resolveReferenceNumber(apt.paymentData, {
+                  appointmentId: apt.id,
+                  appointmentDate: apt.date,
+                });
 
                 return (
                   <div
@@ -281,10 +300,16 @@ export function StaffPaymentManagement() {
                                 <span>{formatDate(apt.date)} at {formatTime12Hour(apt.time)}</span>
                               </div>
                             </div>
-                            <div className="mt-2">
+                            <div className="mt-2 space-y-1">
                               <p className="text-sm text-gray-600">
                                 <span className="font-medium">Service:</span> {serviceName}
                               </p>
+                              {referenceNumber && (
+                                <p className="text-sm text-gray-600">
+                                  <span className="font-medium">Reference Number:</span>{' '}
+                                  <span className="font-mono font-semibold text-[#6b4423]">{referenceNumber}</span>
+                                </p>
+                              )}
                             </div>
                           </div>
                         </div>

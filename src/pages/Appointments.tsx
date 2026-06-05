@@ -9,6 +9,7 @@ import { useServiceStore } from '../stores/serviceStore';
 import { useStaffStore } from '../stores/staffStore';
 import { useAvailabilityStore } from '../stores/availabilityStore';
 import { PaymentModal } from '../components/PaymentModal';
+import { PaymentReceiptModal, type PaymentReceiptData } from '../components/PaymentReceiptModal';
 import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { AppointmentActions } from '../components/AppointmentActions';
 import { toast } from 'sonner';
@@ -45,6 +46,8 @@ export function Appointments() {
     reason: '',
   });
   const [showPayment, setShowPayment] = useState(false);
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptData, setReceiptData] = useState<PaymentReceiptData | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'at_clinic' | 'online'>('at_clinic');
   const [legalModal, setLegalModal] = useState<'terms' | 'privacy' | null>(null);
   const isWalkInBooking = role === 'vet' || role === 'staff';
@@ -498,6 +501,25 @@ export function Appointments() {
     return true;
   };
 
+  const resetBookingForm = () => {
+    setCurrentStep(1);
+    setSelectedService(null);
+    setSelectedVet('');
+    setSelectedDate(null);
+    setSelectedTime('');
+    setFormData({
+      petName: '',
+      ownerName: '',
+      phone: '',
+      email: '',
+      reason: '',
+    });
+    setPaymentMethod(isWalkInBooking ? 'at_clinic' : 'online');
+    setShowPayment(false);
+    setShowReceipt(false);
+    setReceiptData(null);
+  };
+
   const handlePaymentSuccess = async (paymentData: any) => {
     if (!validateForm() || !selectedService || !selectedVet || !selectedDate || !selectedTime) {
       return;
@@ -519,31 +541,29 @@ export function Appointments() {
         paymentStatus: 'down_payment_paid',
         paymentData: {
           ...paymentData,
-          // Keep the original method ('gcash' or 'paymaya') from PaymentModal
-        }
+        },
       });
 
-      toast.success('Appointment booked successfully!');
-      
-      // Reset form
-      setCurrentStep(1);
-      setSelectedService(null);
-      setSelectedVet('');
-      setSelectedDate(null);
-      setSelectedTime('');
-      setFormData({
-        petName: '',
-        ownerName: '',
-        phone: '',
-        email: '',
-        reason: '',
-      });
-      setPaymentMethod(isWalkInBooking ? 'at_clinic' : 'online');
       setShowPayment(false);
+      setReceiptData({
+        referenceNumber: paymentData.referenceNumber,
+        serviceName: selectedService.name,
+        amount: paymentData.amount,
+        paymentMethod: paymentData.method,
+        paymentTimestamp: paymentData.timestamp,
+        appointmentDate: formatDateLocal(selectedDate),
+        appointmentTime: selectedTime,
+      });
+      setShowReceipt(true);
     } catch (error) {
       console.error('Failed to book appointment:', error);
       toast.error('Failed to book appointment. Please try again.');
     }
+  };
+
+  const handleReceiptDone = () => {
+    resetBookingForm();
+    toast.success('Appointment booked successfully!');
   };
 
   const handleProceedToPayment = () => {
@@ -1214,6 +1234,12 @@ export function Appointments() {
         serviceType={selectedService?.name || ''}
         onPaymentSuccess={handlePaymentSuccess}
         defaultPhoneNumber={role === 'owner' ? (formData.phone || getStoredOwnerData()?.phone || '') : undefined}
+      />
+
+      <PaymentReceiptModal
+        isOpen={showReceipt}
+        receipt={receiptData}
+        onDone={handleReceiptDone}
       />
     </div>
   );

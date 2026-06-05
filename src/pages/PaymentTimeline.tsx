@@ -16,6 +16,14 @@ import { useServiceStore } from '../stores/serviceStore';
 import { toast } from 'sonner';
 import type { Appointment } from '../types';
 import { createAppointmentIdMap, generateAppointmentId as generateSequentialAppointmentId } from '../utils/appointmentId';
+import { getTransactionId } from '../utils/transactionId';
+import {
+  DetailField,
+  EmphasizedReferenceField,
+  getOwnerPaymentDetailRows,
+  PaymentDetailsSummary,
+} from '../utils/paymentDetailsDisplay';
+import { resolveReferenceNumber } from '../utils/referenceNumber';
 
 // Legacy service mapping for backward compatibility with old appointment data
 const legacyServices: Record<string, string> = {
@@ -57,6 +65,7 @@ type PaymentMethod = 'At Clinic' | 'Online Payment (GCash)' | 'Online Payment (P
 // Transaction interface
 interface Transaction {
   id: string;
+  transactionId: string;
   appointmentId: string;
   appointmentIdFormatted: string;
   service: string;
@@ -128,6 +137,7 @@ const generateTransactions = (
       if (appointment.paymentStatus === 'down_payment_paid' || appointment.paymentStatus === 'fully_paid') {
         transactions.push({
           id: `${appointment.id}-forfeiture`,
+          transactionId: getTransactionId(appointment, 'deposit'),
           appointmentId: appointment.id,
           appointmentIdFormatted,
           service: serviceName,
@@ -148,6 +158,7 @@ const generateTransactions = (
       // Deposit payment was made online, remaining balance is pending at clinic
       transactions.push({
         id: `${appointment.id}-deposit`,
+        transactionId: getTransactionId(appointment, 'deposit'),
         appointmentId: appointment.id,
         appointmentIdFormatted,
         service: serviceName,
@@ -163,6 +174,7 @@ const generateTransactions = (
       // Remaining balance (pending)
       transactions.push({
         id: `${appointment.id}-remaining`,
+        transactionId: getTransactionId(appointment, 'remaining'),
         appointmentId: appointment.id,
         appointmentIdFormatted,
         service: serviceName,
@@ -190,6 +202,7 @@ const generateTransactions = (
         // Split payment: deposit was paid online, remaining balance paid at clinic
         transactions.push({
           id: `${appointment.id}-deposit`,
+          transactionId: getTransactionId(appointment, 'deposit'),
           appointmentId: appointment.id,
           appointmentIdFormatted,
           service: serviceName,
@@ -204,6 +217,7 @@ const generateTransactions = (
 
         transactions.push({
           id: `${appointment.id}-remaining`,
+          transactionId: getTransactionId(appointment, 'remaining'),
           appointmentId: appointment.id,
           appointmentIdFormatted,
           service: serviceName,
@@ -219,6 +233,7 @@ const generateTransactions = (
         // Full payment at once (either online or at clinic)
         transactions.push({
           id: `${appointment.id}-full`,
+          transactionId: getTransactionId(appointment, 'full'),
           appointmentId: appointment.id,
           appointmentIdFormatted,
           service: serviceName,
@@ -235,6 +250,7 @@ const generateTransactions = (
       // Pending payment - deposit not yet paid
       transactions.push({
         id: `${appointment.id}-pending`,
+        transactionId: getTransactionId(appointment, 'deposit'),
         appointmentId: appointment.id,
         appointmentIdFormatted,
         service: serviceName,
@@ -324,6 +340,7 @@ export function PaymentTimeline() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(txn => 
+        txn.transactionId.toLowerCase().includes(query) ||
         txn.appointmentIdFormatted.toLowerCase().includes(query) ||
         txn.service.toLowerCase().includes(query) ||
         txn.appointment.petName.toLowerCase().includes(query)
@@ -368,8 +385,9 @@ export function PaymentTimeline() {
   const handleExport = (transaction: Transaction) => {
     // Create a CSV content
     const csvContent = [
-      ['Appointment ID', 'Service', 'Date', 'Time', 'Amount', 'Transaction Type', 'Payment Method', 'Status'],
+      ['Transaction ID', 'Appointment ID', 'Service', 'Date', 'Time', 'Amount', 'Transaction Type', 'Payment Method', 'Status'],
       [
+        transaction.transactionId,
         transaction.appointmentIdFormatted,
         transaction.service,
         formatDate(transaction.date),
@@ -579,7 +597,7 @@ export function PaymentTimeline() {
           <table className="w-full">
             <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Appointment ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid</th>
@@ -600,7 +618,7 @@ export function PaymentTimeline() {
                 filteredTransactions.map((transaction) => (
                   <tr key={transaction.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {transaction.appointmentIdFormatted}
+                      {transaction.transactionId}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {transaction.service}
@@ -669,14 +687,23 @@ export function PaymentTimeline() {
       </div>
 
       {/* View Details Modal */}
-      {showDetailsModal && selectedTransaction && (
+      {showDetailsModal && selectedTransaction && (() => {
+        const paymentReferenceNumber = resolveReferenceNumber(
+          selectedTransaction.appointment.paymentData,
+          {
+            appointmentId: selectedTransaction.appointment.id,
+            appointmentDate: selectedTransaction.appointment.date,
+          },
+        );
+
+        return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4">
             <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setShowDetailsModal(false)} />
             <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full">
               <div className="flex items-center justify-between p-6 border-b">
                 <h3 className="text-xl font-semibold text-gray-900">
-                  Transaction Details - {selectedTransaction.appointmentIdFormatted}
+                  Transaction Details - {selectedTransaction.transactionId}
                 </h3>
                 <button
                   onClick={() => setShowDetailsModal(false)}
@@ -686,74 +713,71 @@ export function PaymentTimeline() {
                 </button>
               </div>
 
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600">Appointment ID</p>
-                    <p className="font-medium text-gray-900">{selectedTransaction.appointmentIdFormatted}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Service</p>
-                    <p className="font-medium text-gray-900">{selectedTransaction.service}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Date</p>
-                    <p className="font-medium text-gray-900">{formatDate(selectedTransaction.date)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Time</p>
-                    <p className="font-medium text-gray-900">{formatTime(selectedTransaction.time)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Amount Paid</p>
-                    <p className="font-medium text-gray-900">₱{selectedTransaction.amount.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Transaction Type</p>
-                    <p className="font-medium text-gray-900">{selectedTransaction.transactionType}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Payment Method</p>
-                    <div className="flex items-center gap-2">
-                      {selectedTransaction.paymentMethod === 'At Clinic' ? (
-                        <>
-                          <Building2 className="h-4 w-4 text-blue-600" />
-                          <span className="font-medium text-gray-900">{selectedTransaction.paymentMethod}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Smartphone className="h-4 w-4 text-purple-600" />
-                          <span className="font-medium text-gray-900">{selectedTransaction.paymentMethod}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Status</p>
-                    <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedTransaction.status)}`}>
-                      {selectedTransaction.status}
-                    </span>
-                    {selectedTransaction.status === 'Paid (Forfeited)' && (
-                      <p className="mt-1 text-xs text-orange-700">No-show policy applied</p>
+              <div className="p-6 space-y-5">
+                <div className="flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-4 py-3">
+                  <span className="text-lg font-semibold text-gray-900">
+                    ₱{selectedTransaction.amount.toLocaleString()}
+                  </span>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${getStatusColor(selectedTransaction.status)}`}>
+                    {selectedTransaction.status}
+                  </span>
+                  <span className="text-sm text-gray-500 sm:ml-auto">
+                    {formatDate(selectedTransaction.date)} · {formatTime(selectedTransaction.time)}
+                  </span>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reference</p>
+                  <div className="grid grid-cols-2 items-start gap-x-6 gap-y-3">
+                    {paymentReferenceNumber && (
+                      <EmphasizedReferenceField
+                        referenceNumber={paymentReferenceNumber}
+                        className="col-span-2"
+                      />
                     )}
+                    <DetailField label="Transaction ID" value={selectedTransaction.transactionId} />
+                    <DetailField label="Appointment ID" value={selectedTransaction.appointmentIdFormatted} />
+                    <DetailField label="Transaction Type" value={selectedTransaction.transactionType} />
+                    <DetailField
+                      label="Payment Method"
+                      value={
+                        <span className="inline-flex items-start gap-1.5">
+                          {selectedTransaction.paymentMethod === 'At Clinic' ? (
+                            <Building2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                          ) : (
+                            <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
+                          )}
+                          <span>{selectedTransaction.paymentMethod}</span>
+                        </span>
+                      }
+                    />
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Pet Name</p>
-                    <p className="font-medium text-gray-900">{selectedTransaction.appointment.petName}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Veterinarian</p>
-                    <p className="font-medium text-gray-900">{selectedTransaction.appointment.vet}</p>
+                  {selectedTransaction.status === 'Paid (Forfeited)' && (
+                    <p className="mt-2 text-xs text-orange-700">No-show policy applied</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Appointment</p>
+                  <div className="grid grid-cols-2 items-start gap-x-6 gap-y-3">
+                    <DetailField label="Service" value={selectedTransaction.service} />
+                    <DetailField label="Pet" value={selectedTransaction.appointment.petName} />
+                    <DetailField label="Veterinarian" value={selectedTransaction.appointment.vet} />
                   </div>
                 </div>
+
                 {selectedTransaction.appointment.paymentData && (
-                  <div className="pt-4 border-t">
-                    <p className="text-sm text-gray-600 mb-2">Payment Details</p>
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <pre className="text-xs text-gray-700">
-                        {JSON.stringify(selectedTransaction.appointment.paymentData, null, 2)}
-                      </pre>
-                    </div>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Payment Details</p>
+                    <PaymentDetailsSummary
+                      rows={getOwnerPaymentDetailRows(
+                        selectedTransaction.appointment.paymentData,
+                        {
+                          transactionType: selectedTransaction.transactionType,
+                          amount: selectedTransaction.amount,
+                        },
+                      )}
+                    />
                   </div>
                 )}
                 {selectedTransaction.appointment.status === 'no_show' && (
@@ -801,7 +825,8 @@ export function PaymentTimeline() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

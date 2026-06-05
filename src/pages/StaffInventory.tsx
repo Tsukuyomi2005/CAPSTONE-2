@@ -67,7 +67,14 @@ const CategoryIcon = ({ category, className }: { category: string; className?: s
 type TabType = 'current' | 'pending' | 'adu';
 
 type UsageTrend = 'up' | 'down' | 'stable';
-type UsageHistoryRange = '30d' | '90d' | '6m';
+type UsageHistoryRange = '30d' | '90d' | '6m' | '1y';
+
+const USAGE_HISTORY_RANGE_LABELS: Record<UsageHistoryRange, string> = {
+  '30d': '30 days',
+  '90d': '90 days',
+  '6m': '6 months',
+  '1y': '1 year',
+};
 
 interface ADUItem {
   itemId: string;
@@ -232,20 +239,39 @@ function buildUsageHistoryBuckets(range: UsageHistoryRange, now: Date = new Date
     }
     return buckets;
   }
+  if (range === '6m') {
+    const buckets: { label: string; start: Date; end: Date }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const monthStart = startOfDay(d);
+      const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const monthEnd = startOfDay(endOfMonth);
+      const actualEnd = monthEnd > today ? today : monthEnd;
+      if (monthStart <= actualEnd) {
+        buckets.push({
+          label: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          start: monthStart,
+          end: actualEnd,
+        });
+      }
+    }
+    return buckets;
+  }
+
+  // 1 year — current calendar year only (Jan → today; future months roll in when they arrive)
   const buckets: { label: string; start: Date; end: Date }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+  const calendarYear = today.getFullYear();
+  for (let month = 0; month <= today.getMonth(); month++) {
+    const d = new Date(calendarYear, month, 1);
     const monthStart = startOfDay(d);
-    const endOfMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const endOfMonth = new Date(calendarYear, month + 1, 0);
     const monthEnd = startOfDay(endOfMonth);
     const actualEnd = monthEnd > today ? today : monthEnd;
-    if (monthStart <= actualEnd) {
-      buckets.push({
-        label: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        start: monthStart,
-        end: actualEnd,
-      });
-    }
+    buckets.push({
+      label: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      start: monthStart,
+      end: actualEnd,
+    });
   }
   return buckets;
 }
@@ -254,8 +280,26 @@ function getUsageHistoryPeriodBounds(range: UsageHistoryRange, now: Date = new D
   const today = startOfDay(now);
   if (range === '30d') return { start: addDays(today, -29), end: today };
   if (range === '90d') return { start: addDays(today, -89), end: today };
-  const start = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  if (range === '6m') {
+    const start = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+    return { start: startOfDay(start), end: today };
+  }
+  const start = new Date(today.getFullYear(), 0, 1);
   return { start: startOfDay(start), end: today };
+}
+
+function compactYearBucketLabel(
+  bucket: { label: string; start: Date; end: Date },
+  index: number,
+  buckets: { label: string; start: Date; end: Date }[],
+): string {
+  const month = bucket.start.toLocaleDateString('en-US', { month: 'short' });
+  const year = bucket.start.getFullYear();
+  const prevYear = index > 0 ? buckets[index - 1].start.getFullYear() : year;
+  if (index === 0 || year !== prevYear) {
+    return `${month} '${String(year).slice(-2)}`;
+  }
+  return month;
 }
 
 interface UsageHistoryPanelData {
@@ -289,7 +333,7 @@ function StaffAduExpandedUsagePanel({
         Monthly usage history — {itemName}
       </h3>
       <div className="flex flex-wrap gap-2">
-        {(['30d', '90d', '6m'] as const).map((r) => (
+        {(['30d', '90d', '6m', '1y'] as const).map((r) => (
           <button
             key={r}
             type="button"
@@ -303,7 +347,7 @@ function StaffAduExpandedUsagePanel({
                 : 'border-gray-200 bg-white/80 text-gray-600 hover:bg-gray-50'
             }`}
           >
-            {r === '30d' ? '30 days' : r === '90d' ? '90 days' : '6 months'}
+            {USAGE_HISTORY_RANGE_LABELS[r]}
           </button>
         ))}
       </div>
@@ -339,35 +383,75 @@ function StaffAduExpandedUsagePanel({
         </div>
       </div>
       <div className="pt-2">
-        <div className="flex items-end justify-between gap-2 h-[200px] border-t border-gray-200 pt-4">
-          {data.unitsWithBuckets.map((b, bi) => {
-            const barTrend: UsageTrend =
-              bi === 0 ? 'stable' : computeBarTrend(data.unitsWithBuckets[bi - 1].units, b.units);
-            const isLast = bi === data.unitsWithBuckets.length - 1;
-            const barHeightPx =
-              data.maxBar > 0 ? Math.max(28, Math.round((b.units / data.maxBar) * 140)) : 28;
-            return (
-              <div
-                key={`${b.label}-${bi}`}
-                className="flex flex-1 flex-col items-center justify-end gap-2 min-w-0 h-full"
-              >
-                <span className="text-xs font-semibold text-gray-800 tabular-nums">{b.units}</span>
+        {usageHistoryRange === '1y' ? (
+          <div
+            className="grid w-full items-end gap-2 sm:gap-3 h-[260px] border-t border-gray-200 pt-5"
+            style={{
+              gridTemplateColumns: `repeat(${data.unitsWithBuckets.length}, minmax(0, 1fr))`,
+            }}
+          >
+            {data.unitsWithBuckets.map((b, bi) => {
+              const barTrend: UsageTrend =
+                bi === 0 ? 'stable' : computeBarTrend(data.unitsWithBuckets[bi - 1].units, b.units);
+              const isLast = bi === data.unitsWithBuckets.length - 1;
+              const barHeightPx =
+                data.maxBar > 0 ? Math.max(32, Math.round((b.units / data.maxBar) * 180)) : 32;
+              return (
                 <div
-                  className={cn(
-                    'w-full max-w-[56px] rounded-t-md transition-colors mx-auto',
-                    barTrend === 'up' && (isLast ? 'bg-emerald-600' : 'bg-emerald-400'),
-                    barTrend === 'down' && (isLast ? 'bg-red-600' : 'bg-red-400'),
-                    barTrend === 'stable' && (isLast ? 'bg-gray-500' : 'bg-gray-300')
-                  )}
-                  style={{ height: barHeightPx }}
-                />
-                <span className="text-[10px] sm:text-xs text-gray-600 text-center leading-tight px-0.5">
-                  {b.label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                  key={`${b.label}-${b.start.getTime()}`}
+                  className="flex min-w-0 flex-col items-center justify-end gap-2 h-full px-0.5 sm:px-1"
+                >
+                  <span className="text-xs font-semibold text-gray-800 tabular-nums">{b.units}</span>
+                  <div
+                    className={cn(
+                      'w-full min-w-[12px] rounded-t-md transition-colors',
+                      barTrend === 'up' && (isLast ? 'bg-emerald-600' : 'bg-emerald-400'),
+                      barTrend === 'down' && (isLast ? 'bg-red-600' : 'bg-red-400'),
+                      barTrend === 'stable' && (isLast ? 'bg-gray-500' : 'bg-gray-300')
+                    )}
+                    style={{ height: barHeightPx }}
+                  />
+                  <span
+                    className="w-full text-center text-[10px] sm:text-xs text-gray-600 leading-tight"
+                    title={b.label}
+                  >
+                    {compactYearBucketLabel(b, bi, data.unitsWithBuckets)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex items-end justify-between gap-2 h-[200px] border-t border-gray-200 pt-4">
+            {data.unitsWithBuckets.map((b, bi) => {
+              const barTrend: UsageTrend =
+                bi === 0 ? 'stable' : computeBarTrend(data.unitsWithBuckets[bi - 1].units, b.units);
+              const isLast = bi === data.unitsWithBuckets.length - 1;
+              const barHeightPx =
+                data.maxBar > 0 ? Math.max(28, Math.round((b.units / data.maxBar) * 140)) : 28;
+              return (
+                <div
+                  key={`${b.label}-${bi}`}
+                  className="flex flex-1 flex-col items-center justify-end gap-2 min-w-0 h-full"
+                >
+                  <span className="text-xs font-semibold text-gray-800 tabular-nums">{b.units}</span>
+                  <div
+                    className={cn(
+                      'w-full max-w-[56px] rounded-t-md transition-colors mx-auto',
+                      barTrend === 'up' && (isLast ? 'bg-emerald-600' : 'bg-emerald-400'),
+                      barTrend === 'down' && (isLast ? 'bg-red-600' : 'bg-red-400'),
+                      barTrend === 'stable' && (isLast ? 'bg-gray-500' : 'bg-gray-300')
+                    )}
+                    style={{ height: barHeightPx }}
+                  />
+                  <span className="text-[10px] sm:text-xs text-gray-600 text-center leading-tight px-0.5">
+                    {b.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -706,7 +790,7 @@ export function StaffInventory() {
       peakTrend = computeBarTrend(unitsWithBuckets[peakIdx - 1].units, peak.units);
     }
     const { start: periodStart, end: periodEnd } = getUsageHistoryPeriodBounds(usageHistoryRange);
-      const daysInPeriod =
+    const daysInPeriod =
       Math.ceil((periodEnd.getTime() - periodStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     const aduForRange = daysInPeriod > 0 ? total / daysInPeriod : 0;
     const aduLabel =
@@ -714,7 +798,9 @@ export function StaffInventory() {
         ? 'ADU (last 30 days)'
         : usageHistoryRange === '90d'
           ? 'ADU (last 90 days)'
-          : 'ADU (last 6 months)';
+          : usageHistoryRange === '6m'
+            ? 'ADU (last 6 months)'
+            : `ADU (${periodStart.getFullYear()})`;
     const avgPerWeek = daysInPeriod > 0 ? total / (daysInPeriod / 7) : 0;
     const stock = expandedInventoryItem.stock;
     let projectedStockout: Date | null = null;

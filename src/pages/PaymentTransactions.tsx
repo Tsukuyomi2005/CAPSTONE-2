@@ -1,8 +1,16 @@
 import { useState, useMemo } from 'react';
-import { CreditCard, Filter, Download, Calendar } from 'lucide-react';
+import { CreditCard, Filter, Download, X } from 'lucide-react';
 import { useAppointmentStore } from '../stores/appointmentStore';
 import { useServiceStore } from '../stores/serviceStore';
 import type { Appointment } from '../types';
+import { getTransactionId } from '../utils/transactionId';
+import { createAppointmentIdMap, generateAppointmentId } from '../utils/appointmentId';
+import {
+  AdminPaymentDetailsSummary,
+  DetailField,
+  EmphasizedReferenceField,
+} from '../utils/paymentDetailsDisplay';
+import { resolveReferenceNumber } from '../utils/referenceNumber';
 
 interface PaymentTransaction {
   id: string;
@@ -16,6 +24,7 @@ interface PaymentTransaction {
   appointment: Appointment;
   confirmationDate: string;
   confirmationTime: string;
+  confirmationTimestamp: number;
 }
 
 export function PaymentTransactions() {
@@ -24,6 +33,10 @@ export function PaymentTransactions() {
   
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
   const [amountRangeFilter, setAmountRangeFilter] = useState<string>('all');
+  const [selectedTransaction, setSelectedTransaction] = useState<PaymentTransaction | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+  const appointmentIdMap = useMemo(() => createAppointmentIdMap(appointments), [appointments]);
 
   // Generate transactions - only show completed (fully paid) appointments with full price
   const generateTransactions = useMemo((): PaymentTransaction[] => {
@@ -48,12 +61,6 @@ export function PaymentTransactions() {
       const service = services.find(s => s.id === apt.serviceType);
       const serviceName = service?.name || 'Unknown Service';
       
-      // Generate transaction ID (formatted)
-      const generateTransactionId = (aptId: string) => {
-        const shortId = aptId.slice(-8).toUpperCase();
-        return `TXN-${shortId}`;
-      };
-
       // Use the most recent confirmation date for the transaction
       // For fully paid appointments, prioritize the date when the final payment was confirmed
       let confirmationDate: Date | null = null;
@@ -75,7 +82,7 @@ export function PaymentTransactions() {
       }
 
       // Create transaction - always use full price of the service
-      const transactionId = generateTransactionId(apt.id);
+      const transactionId = getTransactionId(apt);
       // Format date in local timezone (YYYY-MM-DD) to avoid UTC conversion issues
       const formatLocalDate = (date: Date): string => {
         const year = date.getFullYear();
@@ -97,14 +104,13 @@ export function PaymentTransactions() {
         appointment: apt,
         confirmationDate: dateStr,
         confirmationTime: confirmationTime,
+        confirmationTimestamp: confirmationDate.getTime(),
       });
     });
 
-    return Array.from(transactionMap.values()).sort((a, b) => {
-      const dateA = new Date(a.confirmationDate + 'T' + (a.confirmationTime || '00:00:00')).getTime();
-      const dateB = new Date(b.confirmationDate + 'T' + (b.confirmationTime || '00:00:00')).getTime();
-      return dateB - dateA; // Newest first
-    });
+    return Array.from(transactionMap.values()).sort(
+      (a, b) => b.confirmationTimestamp - a.confirmationTimestamp
+    );
   }, [appointments, services]);
 
   // Filter transactions
@@ -177,12 +183,40 @@ export function PaymentTransactions() {
       }
     }
 
-    return filtered;
+    return filtered.sort((a, b) => b.confirmationTimestamp - a.confirmationTimestamp);
   }, [generateTransactions, dateRangeFilter, amountRangeFilter]);
 
   const handleReset = () => {
     setDateRangeFilter('all');
     setAmountRangeFilter('all');
+  };
+
+  const handleViewDetails = (txn: PaymentTransaction) => {
+    setSelectedTransaction(txn);
+    setShowDetailsModal(true);
+  };
+
+  const handleExportTransaction = (txn: PaymentTransaction) => {
+    const csvData = [
+      ['Transaction ID', 'Customer', 'Service', 'Amount', 'Date & Time', 'Status'],
+      [
+        txn.transactionId,
+        txn.customerName,
+        txn.service,
+        `₱${txn.amount.toLocaleString()}`,
+        `${txn.date} ${txn.time}`,
+        txn.status,
+      ],
+    ];
+
+    const csvContent = csvData.map((row) => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transaction-${txn.transactionId}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
   };
 
   const handleExport = () => {
@@ -310,7 +344,11 @@ export function PaymentTransactions() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTransactions.map((txn) => (
-                  <tr key={txn.id} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={txn.id}
+                    onClick={() => handleViewDetails(txn)}
+                    className="hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="text-sm font-medium text-gray-900">{txn.transactionId}</span>
                     </td>
@@ -343,6 +381,109 @@ export function PaymentTransactions() {
           )}
         </div>
       </div>
+
+      {showDetailsModal && selectedTransaction && (() => {
+        const paymentReferenceNumber = resolveReferenceNumber(
+          selectedTransaction.appointment.paymentData,
+          {
+            appointmentId: selectedTransaction.appointment.id,
+            appointmentDate: selectedTransaction.appointment.date,
+          },
+        );
+
+        return (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-gray-600 bg-opacity-75"
+              onClick={() => setShowDetailsModal(false)}
+            />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-2xl w-full">
+              <div className="flex items-center justify-between p-6 border-b">
+                <h3 className="text-xl font-semibold text-gray-900">
+                  Transaction Details - {selectedTransaction.transactionId}
+                </h3>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-5">
+                <div className="flex flex-wrap items-center gap-3 rounded-lg bg-gray-50 px-4 py-3">
+                  <span className="text-lg font-semibold text-gray-900">
+                    ₱{selectedTransaction.amount.toLocaleString()}
+                  </span>
+                  <span className="rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
+                    {selectedTransaction.status}
+                  </span>
+                  <span className="text-sm text-gray-500 sm:ml-auto">
+                    {selectedTransaction.date} · {selectedTransaction.time}
+                  </span>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reference</p>
+                  <div className="grid grid-cols-2 items-start gap-x-6 gap-y-3">
+                    {paymentReferenceNumber && (
+                      <EmphasizedReferenceField
+                        referenceNumber={paymentReferenceNumber}
+                        className="col-span-2"
+                      />
+                    )}
+                    <DetailField label="Transaction ID" value={selectedTransaction.transactionId} />
+                    <DetailField
+                      label="Appointment ID"
+                      value={generateAppointmentId(selectedTransaction.appointment.id, appointmentIdMap)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Appointment</p>
+                  <div className="grid grid-cols-2 items-start gap-x-6 gap-y-3">
+                    <DetailField label="Customer" value={selectedTransaction.customerName} />
+                    <DetailField label="Pet" value={selectedTransaction.appointment.petName} />
+                    <DetailField label="Service" value={selectedTransaction.service} />
+                    <DetailField label="Veterinarian" value={selectedTransaction.appointment.vet} />
+                    <DetailField label="Phone" value={selectedTransaction.appointment.phone} />
+                    <DetailField label="Email" value={selectedTransaction.appointment.email} />
+                  </div>
+                </div>
+
+                {selectedTransaction.appointment.paymentData && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Payment Details</p>
+                    <AdminPaymentDetailsSummary
+                      appointment={selectedTransaction.appointment}
+                      totalAmount={selectedTransaction.amount}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 border-t flex justify-end gap-2">
+                <button
+                  onClick={() => handleExportTransaction(selectedTransaction)}
+                  className="px-4 py-2 border border-green-600 text-green-600 rounded-lg hover:bg-green-50 transition-colors flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Export
+                </button>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </div>
   );
 }

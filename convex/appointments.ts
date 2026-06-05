@@ -719,3 +719,104 @@ export const reschedule = mutation({
   },
 });
 
+const ONLINE_PAYMENT_METHODS = new Set(["gcash", "paymaya", "online"]);
+
+function isOnlinePaymentMethod(method: unknown): boolean {
+  return typeof method === "string" && ONLINE_PAYMENT_METHODS.has(method);
+}
+
+function generatePaymentReferenceNumber(source: number | string): string {
+  const date = new Date(source);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const suffix = String(
+    typeof source === "string" ? date.getTime() : source,
+  )
+    .slice(-5)
+    .padStart(5, "0");
+  return `REF-${yyyy}${mm}${dd}${suffix}`;
+}
+
+function stableReferenceSuffix(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  }
+  return String(hash % 100000).padStart(5, "0");
+}
+
+function resolvePaymentReferenceNumber(
+  paymentData: Record<string, unknown>,
+  appointmentId: string,
+  appointmentDate: string,
+): string | null {
+  if (paymentData.referenceNumber) {
+    return String(paymentData.referenceNumber);
+  }
+
+  const method = paymentData.method;
+  const depositMethod = paymentData.depositMethod;
+  if (!isOnlinePaymentMethod(method) && !isOnlinePaymentMethod(depositMethod)) {
+    return null;
+  }
+
+  const timestamp = paymentData.timestamp;
+  if (typeof timestamp === "string") {
+    return generatePaymentReferenceNumber(timestamp);
+  }
+
+  const transactionId = paymentData.transactionId;
+  if (typeof transactionId === "string") {
+    const digits = transactionId.replace(/\D/g, "");
+    if (digits.length > 0) {
+      return generatePaymentReferenceNumber(Number(digits.slice(-13)));
+    }
+  }
+
+  const dateSource = new Date(`${appointmentDate}T12:00:00`);
+  const yyyy = dateSource.getFullYear();
+  const mm = String(dateSource.getMonth() + 1).padStart(2, "0");
+  const dd = String(dateSource.getDate()).padStart(2, "0");
+  return `REF-${yyyy}${mm}${dd}${stableReferenceSuffix(appointmentId)}`;
+}
+
+/**
+ * Backfill reference numbers for past online payments missing one.
+ */
+export const backfillPaymentReferenceNumbers = mutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const appointments = await ctx.db.query("appointments").collect();
+    let updated = 0;
+
+    for (const appointment of appointments) {
+      const paymentData = appointment.paymentData;
+      if (!paymentData || typeof paymentData !== "object" || Array.isArray(paymentData)) {
+        continue;
+      }
+
+      const data = paymentData as Record<string, unknown>;
+      if (data.referenceNumber) continue;
+
+      const referenceNumber = resolvePaymentReferenceNumber(
+        data,
+        appointment._id,
+        appointment.date,
+      );
+      if (!referenceNumber) continue;
+
+      await ctx.db.patch(appointment._id, {
+        paymentData: {
+          ...data,
+          referenceNumber,
+        },
+      });
+      updated += 1;
+    }
+
+    return updated;
+  },
+});
+
