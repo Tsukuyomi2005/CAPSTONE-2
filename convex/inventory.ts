@@ -19,6 +19,7 @@ export const list = query({
       targetLevel: v.optional(v.number()),
       leadTime: v.optional(v.number()),
       safetyStock: v.optional(v.number()),
+      unitOfMeasurement: v.optional(v.string()),
     })
   ),
   handler: async (ctx) => {
@@ -40,6 +41,7 @@ export const add = mutation({
     targetLevel: v.optional(v.number()),
     leadTime: v.optional(v.number()),
     safetyStock: v.optional(v.number()),
+    unitOfMeasurement: v.optional(v.string()),
   },
   returns: v.id("inventoryItems"),
   handler: async (ctx, args) => {
@@ -62,6 +64,7 @@ export const update = mutation({
     targetLevel: v.optional(v.number()),
     leadTime: v.optional(v.number()),
     safetyStock: v.optional(v.number()),
+    unitOfMeasurement: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

@@ -6,6 +6,7 @@ import { useRoleStore } from '../stores/roleStore';
 import { InventoryModal } from '../components/InventoryModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { InventoryItem } from '../types';
+import { formatStockWithUnit } from '../utils/inventoryDisplay';
 
 // Medication Icon Component
 const MedicationIcon = ({ className }: { className?: string }) => (
@@ -339,7 +340,7 @@ export function Inventory() {
                         <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>{item.category}</td>
                         <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                           <span className={`text-sm font-medium ${isLowStock(item.stock) ? 'text-red-600' : 'text-gray-900'}`}>
-                            {item.stock}
+                            {formatStockWithUnit(item.stock, item.unitOfMeasurement)}
                           </span>
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>₱{item.price.toFixed(2)}</td>
@@ -443,7 +444,7 @@ export function Inventory() {
                       <div>
                         <span className="text-gray-500">Stock:</span>
                         <p className={`font-medium ${isLowStock(item.stock) ? 'text-red-600' : 'text-gray-900'}`}>
-                          {item.stock}
+                          {formatStockWithUnit(item.stock, item.unitOfMeasurement)}
                         </p>
                       </div>
                       <div>
@@ -624,6 +625,7 @@ export function Inventory() {
             isOpen={isModalOpen}
             onClose={handleModalClose}
             item={editingItem}
+            showUnitOfMeasurement
           />
 
           <ConfirmDialog

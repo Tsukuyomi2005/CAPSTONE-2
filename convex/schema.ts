@@ -15,6 +15,7 @@ const applicationTables = {
     targetLevel: v.optional(v.number()),
     leadTime: v.optional(v.number()),
     safetyStock: v.optional(v.number()),
+    unitOfMeasurement: v.optional(v.string()),
   }),
   appointments: defineTable({
     petName: v.string(),

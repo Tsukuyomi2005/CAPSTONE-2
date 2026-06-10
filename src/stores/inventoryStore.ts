@@ -17,6 +17,7 @@ function convertInventoryItem(doc: {
   targetLevel?: number;
   leadTime?: number;
   safetyStock?: number;
+  unitOfMeasurement?: string;
 }): InventoryItem {
   return {
     id: doc._id,
@@ -29,6 +30,7 @@ function convertInventoryItem(doc: {
     targetLevel: doc.targetLevel,
     leadTime: doc.leadTime,
     safetyStock: doc.safetyStock,
+    unitOfMeasurement: doc.unitOfMeasurement,
   };
 }
 
@@ -55,6 +57,7 @@ export function useInventoryStore() {
       targetLevel: item.targetLevel,
       leadTime: item.leadTime,
       safetyStock: item.safetyStock,
+      unitOfMeasurement: item.unitOfMeasurement,
     });
   };
 
@@ -70,6 +73,7 @@ export function useInventoryStore() {
       targetLevel?: number;
       leadTime?: number;
       safetyStock?: number;
+      unitOfMeasurement?: string;
     } = {
       id: id as Id<"inventoryItems">,
     };
@@ -83,6 +87,7 @@ export function useInventoryStore() {
     if (updates.targetLevel !== undefined) updateData.targetLevel = updates.targetLevel;
     if (updates.leadTime !== undefined) updateData.leadTime = updates.leadTime;
     if (updates.safetyStock !== undefined) updateData.safetyStock = updates.safetyStock;
+    if (updates.unitOfMeasurement !== undefined) updateData.unitOfMeasurement = updates.unitOfMeasurement;
 
     await updateItemMutation(updateData);
   };

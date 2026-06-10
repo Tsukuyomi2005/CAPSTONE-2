@@ -2,6 +2,10 @@ import { useState, useEffect, useMemo, type ChangeEvent, type FormEvent } from '
 import { X } from 'lucide-react';
 import { useInventoryStore } from '../stores/inventoryStore';
 import type { InventoryItem } from '../types';
+import { UnitOfMeasurementSelect } from './UnitOfMeasurementSelect';
+import { InventoryCategorySelect } from './InventoryCategorySelect';
+import { buildStoredUnit, resolveUnitFormState } from '../constants/inventoryUnits';
+import { formatStockWithUnit } from '../utils/inventoryDisplay';
 
 interface InventoryModalProps {
   isOpen: boolean;
@@ -11,9 +15,18 @@ interface InventoryModalProps {
   editTitle?: string;
   /** When set (e.g. clinic staff inventory), validates item name length */
   itemNameLength?: { min: number; max: number };
+  /** Show unit-of-measurement picker (clinic staff / admin catalog) */
+  showUnitOfMeasurement?: boolean;
 }
 
-export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLength }: InventoryModalProps) {
+export function InventoryModal({
+  isOpen,
+  onClose,
+  item,
+  editTitle,
+  itemNameLength,
+  showUnitOfMeasurement = false,
+}: InventoryModalProps) {
   const { addItem, updateItem } = useInventoryStore();
   const [formData, setFormData] = useState({
     name: '',
@@ -23,6 +36,7 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
   });
   /** String so the field can be cleared with Backspace (avoids number input quirks) */
   const [priceInput, setPriceInput] = useState('');
+  const [unitOfMeasurement, setUnitOfMeasurement] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -46,6 +60,7 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
       setPriceInput(
         item.price !== undefined && item.price !== null ? String(item.price) : ''
       );
+      setUnitOfMeasurement(item.unitOfMeasurement || '');
     } else {
       setFormData({
         name: '',
@@ -54,6 +69,7 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
         expiryDate: ''
       });
       setPriceInput('');
+      setUnitOfMeasurement('');
     }
     setErrors({});
   }, [item, isOpen]);
@@ -93,9 +109,16 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
     }
     if (!formData.expiryDate) {
       newErrors.expiryDate = 'Expiry date is required';
-    } else if (formData.expiryDate < todayMin) {
+    } else     if (formData.expiryDate < todayMin) {
       newErrors.expiryDate =
         'Expiry date cannot be in the past. Choose today or a future date.';
+    }
+    if (showUnitOfMeasurement) {
+      const { selectedOption, customUnit } = resolveUnitFormState(unitOfMeasurement);
+      const stored = buildStoredUnit(selectedOption, customUnit);
+      if (!stored) {
+        newErrors.unitOfMeasurement = 'Unit of measurement is required';
+      }
     }
 
     setErrors(newErrors);
@@ -108,6 +131,10 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
     if (!validateForm()) return;
 
     const price = parseFloat(priceInput.trim());
+    const unitForm = resolveUnitFormState(unitOfMeasurement);
+    const storedUnit = showUnitOfMeasurement
+      ? buildStoredUnit(unitForm.selectedOption, unitForm.customUnit)
+      : undefined;
     setIsSubmitting(true);
     try {
       if (item) {
@@ -117,16 +144,16 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
           category: formData.category,
           price,
           expiryDate: formData.expiryDate,
-          // Stock is not updated - it's managed by clinic staff
+          ...(storedUnit !== undefined ? { unitOfMeasurement: storedUnit } : {}),
         });
       } else {
-        // When adding new item, set stock to 0 (admin cannot set stock - only clinic staff can)
         await addItem({
           name: formData.name.trim(),
           category: formData.category,
-          stock: 0, // Stock starts at 0, clinic staff will add stock
+          stock: 0,
           price,
           expiryDate: formData.expiryDate,
+          ...(storedUnit !== undefined ? { unitOfMeasurement: storedUnit } : {}),
         });
       }
       onClose();
@@ -181,26 +208,11 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
               {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Category *
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e: ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, category: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.category ? 'border-red-500' : 'border-gray-300'
-                }`}
-              >
-                <option value="">Select category</option>
-                <option value="Medication">Medication</option>
-                <option value="Surgical">Surgical</option>
-                <option value="Diagnostic">Diagnostic</option>
-                <option value="Supplies">Supplies</option>
-                <option value="Equipment">Equipment</option>
-              </select>
-              {errors.category && <p className="text-red-500 text-sm mt-1">{errors.category}</p>}
-            </div>
+            <InventoryCategorySelect
+              value={formData.category}
+              onChange={(category) => setFormData({ ...formData, category })}
+              error={errors.category}
+            />
 
             {!item && (
               <div>
@@ -218,6 +230,15 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
                   }`}
                 />
                 {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
+                {showUnitOfMeasurement && (
+                  <div className="mt-4">
+                    <UnitOfMeasurementSelect
+                      value={unitOfMeasurement}
+                      onChange={setUnitOfMeasurement}
+                      error={errors.unitOfMeasurement}
+                    />
+                  </div>
+                )}
                 <p className="text-xs text-gray-500 mt-1">Stock will be set to 0. Clinic staff will manage stock quantities.</p>
               </div>
             )}
@@ -229,12 +250,7 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
                   </span>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-2xl font-bold tabular-nums text-gray-900">
-                      {item.stock}
-                    </span>
-                    <span
-                      className="inline-flex items-center rounded-full border border-[#8B5A36]/35 bg-[#F4E4D4] px-2.5 py-0.5 text-xs font-medium text-[#5C4033] shadow-sm"
-                    >
-                      units in stock
+                      {formatStockWithUnit(item.stock, item.unitOfMeasurement)}
                     </span>
                   </div>
                 </div>
@@ -254,6 +270,13 @@ export function InventoryModal({ isOpen, onClose, item, editTitle, itemNameLengt
                   />
                   {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
                 </div>
+                {showUnitOfMeasurement && (
+                  <UnitOfMeasurementSelect
+                    value={unitOfMeasurement}
+                    onChange={setUnitOfMeasurement}
+                    error={errors.unitOfMeasurement}
+                  />
+                )}
               </div>
             )}
 

@@ -9,6 +9,7 @@ import { InventoryModal } from '../components/InventoryModal';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import type { InventoryItem, Appointment } from '../types';
+import { formatStockWithUnit } from '../utils/inventoryDisplay';
 
 // Medication Icon Component
 const MedicationIcon = ({ className }: { className?: string }) => (
@@ -1241,7 +1242,7 @@ export function StaffInventory() {
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>{item.category}</td>
                     <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                       <span className={`text-sm font-medium ${isLowStock(item.stock) ? 'text-red-600' : 'text-gray-900'}`}>
-                        {item.stock}
+                        {formatStockWithUnit(item.stock, item.unitOfMeasurement)}
                       </span>
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>₱{item.price.toFixed(2)}</td>
@@ -1343,7 +1344,7 @@ export function StaffInventory() {
                   <div>
                     <span className="text-gray-500">Stock:</span>
                     <p className={`font-medium ${isLowStock(item.stock) ? 'text-red-600' : 'text-gray-900'}`}>
-                      {item.stock}
+                      {formatStockWithUnit(item.stock, item.unitOfMeasurement)}
                     </p>
                   </div>
                   <div>
@@ -1539,7 +1540,10 @@ export function StaffInventory() {
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Current Stock: <span className="font-bold">{adjustingStock.item.stock}</span>
+                    Current Stock:{' '}
+                    <span className="font-bold">
+                      {formatStockWithUnit(adjustingStock.item.stock, adjustingStock.item.unitOfMeasurement)}
+                    </span>
                   </label>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     {adjustingStock.adjustment > 0 ? 'Quantity to Add' : 'Quantity to Deduct'}
@@ -1594,7 +1598,10 @@ export function StaffInventory() {
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Current Stock: <span className="font-bold">{editingReorderPoint.stock}</span>
+                    Current Stock:{' '}
+                    <span className="font-bold">
+                      {formatStockWithUnit(editingReorderPoint.stock, editingReorderPoint.unitOfMeasurement)}
+                    </span>
                   </label>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Average Daily Use: <span className="font-bold">{getItemADU(editingReorderPoint.name).toFixed(2)}</span>
@@ -1700,6 +1707,7 @@ export function StaffInventory() {
         item={catalogEditingItem}
         editTitle="Edit Item Details"
         itemNameLength={{ min: 3, max: 80 }}
+        showUnitOfMeasurement
       />
 
       <ConfirmDialog

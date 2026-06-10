@@ -9,6 +9,7 @@ export interface InventoryItem {
   targetLevel?: number;
   leadTime?: number;
   safetyStock?: number;
+  unitOfMeasurement?: string;
 }
 
 export interface Appointment {
