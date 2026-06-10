@@ -19,7 +19,10 @@ export const PREDEFINED_INVENTORY_UNITS = [
 
 export const INVENTORY_UNIT_OTHER = 'Other';
 
-export const INVENTORY_UNIT_OPTIONS = [...PREDEFINED_INVENTORY_UNITS, INVENTORY_UNIT_OTHER] as const;
+export const INVENTORY_UNIT_OPTIONS = [
+  ...[...PREDEFINED_INVENTORY_UNITS].sort((a, b) => a.localeCompare(b)),
+  INVENTORY_UNIT_OTHER,
+] as const;
 
 export type PredefinedInventoryUnit = (typeof PREDEFINED_INVENTORY_UNITS)[number];
 
