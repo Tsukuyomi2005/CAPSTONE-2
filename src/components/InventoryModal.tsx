@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ChangeEvent, type FormEvent } from 'react';
+import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { useInventoryStore } from '../stores/inventoryStore';
 import type { InventoryItem } from '../types';
@@ -32,7 +32,6 @@ export function InventoryModal({
     name: '',
     category: '',
     stock: 0,
-    expiryDate: ''
   });
   /** String so the field can be cleared with Backspace (avoids number input quirks) */
   const [priceInput, setPriceInput] = useState('');
@@ -40,22 +39,12 @@ export function InventoryModal({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  /** Local calendar date as YYYY-MM-DD for date input min + validation */
-  const todayMin = useMemo(() => {
-    const n = new Date();
-    const y = n.getFullYear();
-    const m = String(n.getMonth() + 1).padStart(2, '0');
-    const d = String(n.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }, [isOpen]);
-
   useEffect(() => {
     if (item) {
       setFormData({
         name: item.name,
         category: item.category,
         stock: item.stock,
-        expiryDate: item.expiryDate
       });
       setPriceInput(
         item.price !== undefined && item.price !== null ? String(item.price) : ''
@@ -66,7 +55,6 @@ export function InventoryModal({
         name: '',
         category: '',
         stock: 0,
-        expiryDate: ''
       });
       setPriceInput('');
       setUnitOfMeasurement('');
@@ -107,12 +95,6 @@ export function InventoryModal({
     if (priceInput.trim() === '' || Number.isNaN(parsedPrice) || parsedPrice <= 0) {
       newErrors.price = 'Price must be greater than 0';
     }
-    if (!formData.expiryDate) {
-      newErrors.expiryDate = 'Expiry date is required';
-    } else     if (formData.expiryDate < todayMin) {
-      newErrors.expiryDate =
-        'Expiry date cannot be in the past. Choose today or a future date.';
-    }
     if (showUnitOfMeasurement) {
       const { selectedOption, customUnit } = resolveUnitFormState(unitOfMeasurement);
       const stored = buildStoredUnit(selectedOption, customUnit);
@@ -138,12 +120,10 @@ export function InventoryModal({
     setIsSubmitting(true);
     try {
       if (item) {
-        // When editing, only update name, category, price, and expiry date (not stock)
         await updateItem(item.id, {
           name: formData.name.trim(),
           category: formData.category,
           price,
-          expiryDate: formData.expiryDate,
           ...(storedUnit !== undefined ? { unitOfMeasurement: storedUnit } : {}),
         });
       } else {
@@ -152,7 +132,6 @@ export function InventoryModal({
           category: formData.category,
           stock: 0,
           price,
-          expiryDate: formData.expiryDate,
           ...(storedUnit !== undefined ? { unitOfMeasurement: storedUnit } : {}),
         });
       }
@@ -239,7 +218,9 @@ export function InventoryModal({
                     />
                   </div>
                 )}
-                <p className="text-xs text-gray-500 mt-1">Stock will be set to 0. Clinic staff will manage stock quantities.</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Stock starts at 0. Use Add Batch to receive stock with expiry, or Add Stock for quick quantity updates.
+                </p>
               </div>
             )}
             {item && (
@@ -279,22 +260,6 @@ export function InventoryModal({
                 )}
               </div>
             )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Expiry Date *
-              </label>
-              <input
-                type="date"
-                min={todayMin}
-                value={formData.expiryDate}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, expiryDate: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.expiryDate ? 'border-red-500' : 'border-gray-300'
-                }`}
-              />
-              {errors.expiryDate && <p className="text-red-500 text-sm mt-1">{errors.expiryDate}</p>}
-            </div>
 
             {errors.submit && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3">

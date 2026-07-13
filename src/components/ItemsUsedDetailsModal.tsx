@@ -177,10 +177,22 @@ export function ItemsUsedDetailsModal({ isOpen, onClose, appointment }: ItemsUse
 
                       return (
                         <tr key={`${item.itemId}-${index}`} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="px-4 py-3">
                             <div className="flex items-center">
                               <CategoryIcon category={item.itemCategory} className="h-5 w-5 mr-2" />
-                              <span className="text-sm font-medium text-gray-900">{item.itemName}</span>
+                              <div>
+                                <span className="text-sm font-medium text-gray-900">{item.itemName}</span>
+                                {item.fefoAllocations && item.fefoAllocations.length > 0 && (
+                                  <ul className="mt-1 space-y-0.5">
+                                    {item.fefoAllocations.map((alloc, ai) => (
+                                      <li key={`${alloc.batchId}-${ai}`} className="text-xs text-[#5C4033]">
+                                        Qty {alloc.quantity} · Exp{' '}
+                                        {new Date(alloc.expiryDate + 'T12:00:00').toLocaleDateString()}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">

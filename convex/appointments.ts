@@ -60,6 +60,12 @@ export const list = query({
         approvedBy: v.optional(v.string()),
         approvedByName: v.optional(v.string()),
         approvedAt: v.optional(v.string()),
+        fefoAllocations: v.optional(v.array(v.object({
+          batchId: v.string(),
+          expiryDate: v.string(),
+          dateReceived: v.string(),
+          quantity: v.number(),
+        }))),
       }))),
       rescheduleCount: v.optional(v.number()),
       rescheduleHistory: v.optional(
@@ -157,6 +163,12 @@ export const listByDate = query({
         approvedBy: v.optional(v.string()),
         approvedByName: v.optional(v.string()),
         approvedAt: v.optional(v.string()),
+        fefoAllocations: v.optional(v.array(v.object({
+          batchId: v.string(),
+          expiryDate: v.string(),
+          dateReceived: v.string(),
+          quantity: v.number(),
+        }))),
       }))),
       rescheduleCount: v.optional(v.number()),
       rescheduleHistory: v.optional(
@@ -325,6 +337,12 @@ export const update = mutation({
       approvedBy: v.optional(v.string()),
       approvedByName: v.optional(v.string()),
       approvedAt: v.optional(v.string()),
+      fefoAllocations: v.optional(v.array(v.object({
+        batchId: v.string(),
+        expiryDate: v.string(),
+        dateReceived: v.string(),
+        quantity: v.number(),
+      }))),
     }))),
     ownerCancellationReasonCode: v.optional(v.string()),
     ownerCancellationReasonDetail: v.optional(v.string()),

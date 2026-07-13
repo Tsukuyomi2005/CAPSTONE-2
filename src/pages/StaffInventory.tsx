@@ -6,10 +6,12 @@ import { createAppointmentIdMap, generateAppointmentId as generateSequentialAppo
 import { RejectDeductionDialog } from '../components/RejectDeductionDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { InventoryModal } from '../components/InventoryModal';
+import { InventoryBatchRows } from '../components/InventoryBatchRows';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
-import type { InventoryItem, Appointment } from '../types';
+import type { InventoryItem, InventoryBatch, Appointment } from '../types';
 import { formatStockWithUnit } from '../utils/inventoryDisplay';
+import { getUseNextBatch } from '../utils/fefo';
 
 // Medication Icon Component
 const MedicationIcon = ({ className }: { className?: string }) => (
@@ -468,25 +470,27 @@ interface PendingDeduction {
     deductionStatus?: 'pending' | 'confirmed' | 'rejected';
     loggedAt?: string;
     rejectedReason?: string;
+    fefoAllocations?: Array<{
+      batchId: string;
+      expiryDate: string;
+      dateReceived: string;
+      quantity: number;
+    }>;
   }>;
 }
 
 function ItemActionsMenu({
-  item,
   isOpen,
   onToggle,
-  onAddStock,
-  onDeductStock,
+  onAddBatch,
   onInventorySettings,
   onEditItem,
   onDelete,
   variant,
 }: {
-  item: InventoryItem;
   isOpen: boolean;
   onToggle: () => void;
-  onAddStock: () => void;
-  onDeductStock: () => void;
+  onAddBatch: () => void;
   onInventorySettings: () => void;
   onEditItem: () => void;
   onDelete: () => void;
@@ -513,13 +517,9 @@ function ItemActionsMenu({
       </button>
       {isOpen && (
         <div className={panel} role="menu">
-          <button type="button" role="menuitem" className={row} onClick={onAddStock}>
-            <Plus className="h-4 w-4 text-green-600" />
-            Add stock
-          </button>
-          <button type="button" role="menuitem" className={row} onClick={onDeductStock}>
-            <Minus className="h-4 w-4 text-red-600" />
-            Remove stock
+          <button type="button" role="menuitem" className={row} onClick={onAddBatch}>
+            <Package className="h-4 w-4 text-[#8B5A36]" />
+            Add Batch
           </button>
           <div className="my-1 border-t border-gray-200" aria-hidden />
           <button type="button" role="menuitem" className={row} onClick={onEditItem}>
@@ -547,7 +547,8 @@ function ItemActionsMenu({
 }
 
 export function StaffInventory() {
-  const { items, updateItem, deleteItem } = useInventoryStore();
+  const { items, updateItem, deleteItem, getBatchesForItem, receiveBatch, updateBatch, issueStockFefo } =
+    useInventoryStore();
   const { appointments, updateAppointment } = useAppointmentStore();
   const [activeTab, setActiveTab] = useState<TabType>('current');
   const [searchTerm, setSearchTerm] = useState('');
@@ -556,7 +557,20 @@ export function StaffInventory() {
   const [aduCategoryFilter, setAduCategoryFilter] = useState('');
   const [expandedAduItemId, setExpandedAduItemId] = useState<string | null>(null);
   const [usageHistoryRange, setUsageHistoryRange] = useState<UsageHistoryRange>('30d');
-  const [adjustingStock, setAdjustingStock] = useState<{ item: InventoryItem; adjustment: number } | null>(null);
+  const [editingBatch, setEditingBatch] = useState<{
+    item: InventoryItem;
+    batch: InventoryBatch;
+  } | null>(null);
+  const [editBatchName, setEditBatchName] = useState('');
+  const [editBatchQty, setEditBatchQty] = useState('0');
+  const [editBatchReceived, setEditBatchReceived] = useState('');
+  const [editBatchExpiry, setEditBatchExpiry] = useState('');
+  const [addingBatchItem, setAddingBatchItem] = useState<InventoryItem | null>(null);
+  const [batchName, setBatchName] = useState('');
+  const [batchQuantity, setBatchQuantity] = useState('1');
+  const [receiveExpiry, setReceiveExpiry] = useState('');
+  const [receiveDate, setReceiveDate] = useState('');
+  const [expandedBatchItemId, setExpandedBatchItemId] = useState<string | null>(null);
   const [editingReorderPoint, setEditingReorderPoint] = useState<InventoryItem | null>(null);
   const [leadTimeValue, setLeadTimeValue] = useState<string>('');
   const [safetyStockValue, setSafetyStockValue] = useState<string>('');
@@ -827,7 +841,8 @@ export function StaffInventory() {
     };
   }, [expandedInventoryItem, expandedAduRow, usageHistoryRange, appointments]);
 
-  const isExpired = (expiryDate: string) => {
+  const isExpired = (expiryDate?: string) => {
+    if (!expiryDate) return false;
     return new Date(expiryDate) < new Date();
   };
 
@@ -857,27 +872,95 @@ export function StaffInventory() {
     return 'safe';
   };
 
-  const handleStockAdjustment = async (item: InventoryItem, adjustment: number) => {
-    if (!adjustingStock || adjustment === 0) return;
-    
-    const newStock = item.stock + adjustment;
-    if (newStock < 0) {
-      toast.error('Stock cannot be negative');
+  const openEditBatchModal = (item: InventoryItem, batch: InventoryBatch) => {
+    setEditingBatch({ item, batch });
+    setEditBatchName(batch.batchName || '');
+    setEditBatchQty(String(batch.quantityRemaining));
+    setEditBatchReceived(batch.dateReceived);
+    setEditBatchExpiry(batch.expiryDate);
+  };
+
+  const handleSaveBatchEdit = async () => {
+    if (!editingBatch) return;
+    const qty = parseInt(editBatchQty, 10);
+    if (!editBatchName.trim()) {
+      toast.error('Batch name is required');
       return;
     }
-
+    if (!Number.isFinite(qty) || qty < 0) {
+      toast.error('Quantity remaining must be 0 or greater');
+      return;
+    }
+    if (!editBatchReceived) {
+      toast.error('Date received is required');
+      return;
+    }
+    if (!editBatchExpiry) {
+      toast.error('Expiry date is required');
+      return;
+    }
     try {
-      await updateItem(item.id, { stock: newStock });
-      toast.success(`Stock ${adjustment > 0 ? 'added' : 'deducted'} successfully`);
-      setAdjustingStock(null);
+      await updateBatch({
+        batchId: editingBatch.batch.id,
+        batchName: editBatchName.trim(),
+        quantityRemaining: qty,
+        dateReceived: editBatchReceived,
+        expiryDate: editBatchExpiry,
+      });
+      toast.success('Batch updated successfully');
+      setEditingBatch(null);
     } catch (error) {
-      console.error('Failed to update stock:', error);
-      toast.error('Failed to update stock. Please try again.');
+      console.error('Failed to update batch:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update batch.');
     }
   };
 
-  const openAdjustModal = (item: InventoryItem, adjustment: number) => {
-    setAdjustingStock({ item, adjustment });
+  const openAddBatchModal = (item: InventoryItem) => {
+    const today = new Date().toISOString().slice(0, 10);
+    setBatchName('');
+    setBatchQuantity('1');
+    setReceiveDate(today);
+    setReceiveExpiry(item.expiryDate || today);
+    setAddingBatchItem(item);
+  };
+
+  const handleAddBatch = async () => {
+    if (!addingBatchItem) return;
+    const qty = parseInt(batchQuantity, 10);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      toast.error('Enter a valid quantity received');
+      return;
+    }
+    if (!batchName.trim()) {
+      toast.error('Batch name is required');
+      return;
+    }
+    if (!receiveDate) {
+      toast.error('Date received is required');
+      return;
+    }
+    if (!receiveExpiry) {
+      toast.error('Expiry date is required');
+      return;
+    }
+    try {
+      await receiveBatch({
+        itemId: addingBatchItem.id,
+        quantity: qty,
+        expiryDate: receiveExpiry,
+        dateReceived: receiveDate,
+        batchName: batchName.trim(),
+      });
+      toast.success('Batch added successfully');
+      setAddingBatchItem(null);
+      setBatchName('');
+      setBatchQuantity('1');
+      setReceiveExpiry('');
+      setReceiveDate('');
+    } catch (error) {
+      console.error('Failed to add batch:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to add batch.');
+    }
   };
 
   // Helper function to get ADU for a specific item
@@ -985,7 +1068,13 @@ export function StaffInventory() {
       const staffName = getStaffName();
       const approvalTimestamp = new Date().toISOString();
 
-      // Update itemsUsed to mark as confirmed with approval info
+      // Deduct items from inventory using FEFO and attach final allocations
+      const allocationsByItemId = new Map<string, Awaited<ReturnType<typeof issueStockFefo>>>();
+      for (const item of selectedDeduction.itemsUsed) {
+        const allocations = await issueStockFefo(item.itemId, item.quantity);
+        allocationsByItemId.set(item.itemId, allocations);
+      }
+
       const updatedItemsUsed = selectedDeduction.appointment.itemsUsed?.map(item => {
         if (selectedDeduction.itemsUsed.some(pi => pi.itemId === item.itemId)) {
           return {
@@ -993,6 +1082,7 @@ export function StaffInventory() {
             deductionStatus: 'confirmed' as const,
             approvedAt: approvalTimestamp,
             approvedByName: staffName,
+            fefoAllocations: allocationsByItemId.get(item.itemId) ?? item.fefoAllocations,
           };
         }
         return item;
@@ -1002,16 +1092,7 @@ export function StaffInventory() {
         itemsUsed: updatedItemsUsed,
       });
 
-      // Deduct items from inventory
-      for (const item of selectedDeduction.itemsUsed) {
-        const inventoryItem = items.find(i => i.id === item.itemId);
-        if (inventoryItem) {
-          const newStock = inventoryItem.stock - item.quantity;
-          await updateItem(item.itemId, { stock: newStock });
-        }
-      }
-
-      toast.success('Deduction confirmed and inventory updated successfully');
+      toast.success('Deduction confirmed with FEFO batch allocation');
       setShowConfirmDialog(false);
       setSelectedDeduction(null);
     } catch (error) {
@@ -1209,18 +1290,40 @@ export function StaffInventory() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredItems.map((item) => {
                   const expired = isExpired(item.expiryDate);
                   const expiredMuted = expired ? 'opacity-60' : '';
+                  const itemBatches = getBatchesForItem(item.id);
+                  const useNext = getUseNextBatch(itemBatches);
+                  const batchesExpanded = expandedBatchItemId === item.id;
                   return (
-                  <tr key={item.id} className={`hover:bg-purple-100 transition-colors ${expired ? 'bg-gray-50' : ''}`}>
+                  <Fragment key={item.id}>
+                  <tr
+                    className={`hover:bg-purple-100 transition-colors cursor-pointer ${expired ? 'bg-gray-50' : ''} ${
+                      batchesExpanded ? 'bg-[#f4e4d4]/30' : ''
+                    }`}
+                    onClick={() =>
+                      setExpandedBatchItemId((prev) => (prev === item.id ? null : item.id))
+                    }
+                    aria-expanded={batchesExpanded}
+                  >
                     <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                       <div className="flex items-center">
+                        <span
+                          className="mr-1 rounded p-1 text-gray-500"
+                          aria-hidden
+                        >
+                          {batchesExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </span>
                         {item.category === 'Medication' ? (
                           <MedicationIcon className="h-8 w-8 mr-3" />
                         ) : item.category === 'Diagnostic' ? (
@@ -1229,13 +1332,16 @@ export function StaffInventory() {
                           <SurgicalIcon className="h-8 w-8 mr-3" />
                         ) : item.category === 'Supplies' ? (
                           <SuppliesIcon className="h-8 w-8 mr-3" />
-                        ) : item.category === 'Equipment' ? (
-                          <EquipmentIcon className="h-8 w-8 mr-3" />
                         ) : (
                           <Package className="h-8 w-8 text-gray-400 mr-3" />
                         )}
                         <div>
                           <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                          {useNext && (
+                            <p className="text-xs text-[#8B5A36] mt-0.5">
+                              Next Batch: Exp {new Date(useNext.expiryDate + 'T12:00:00').toLocaleDateString()}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1248,39 +1354,10 @@ export function StaffInventory() {
                     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>₱{item.price.toFixed(2)}</td>
                     <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                       <span className={`text-sm ${expired ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                        {new Date(item.expiryDate).toLocaleDateString()}
+                        {item.expiryDate
+                          ? new Date(item.expiryDate + 'T12:00:00').toLocaleDateString()
+                          : '—'}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <ItemActionsMenu
-                        item={item}
-                        isOpen={actionMenuOpenId === item.id}
-                        onToggle={() =>
-                          setActionMenuOpenId((prev) => (prev === item.id ? null : item.id))
-                        }
-                        onAddStock={() => {
-                          setActionMenuOpenId(null);
-                          openAdjustModal(item, 1);
-                        }}
-                        onDeductStock={() => {
-                          setActionMenuOpenId(null);
-                          openAdjustModal(item, -1);
-                        }}
-                        onInventorySettings={() => {
-                          setActionMenuOpenId(null);
-                          setEditingReorderPoint(item);
-                        }}
-                        onEditItem={() => {
-                          setActionMenuOpenId(null);
-                          setCatalogEditingItem(item);
-                          setCatalogModalOpen(true);
-                        }}
-                        onDelete={() => {
-                          setActionMenuOpenId(null);
-                          setCatalogDeleteId(item.id);
-                        }}
-                        variant="table"
-                      />
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${expiredMuted}`}>
                       {getStockStatus(item) === 'safe' && (
@@ -1302,7 +1379,47 @@ export function StaffInventory() {
                         </span>
                       )}
                     </td>
+                    <td
+                      className="px-6 py-4 whitespace-nowrap text-sm font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ItemActionsMenu
+                        isOpen={actionMenuOpenId === item.id}
+                        onToggle={() =>
+                          setActionMenuOpenId((prev) => (prev === item.id ? null : item.id))
+                        }
+                        onAddBatch={() => {
+                          setActionMenuOpenId(null);
+                          openAddBatchModal(item);
+                        }}
+                        onInventorySettings={() => {
+                          setActionMenuOpenId(null);
+                          setEditingReorderPoint(item);
+                        }}
+                        onEditItem={() => {
+                          setActionMenuOpenId(null);
+                          setCatalogEditingItem(item);
+                          setCatalogModalOpen(true);
+                        }}
+                        onDelete={() => {
+                          setActionMenuOpenId(null);
+                          setCatalogDeleteId(item.id);
+                        }}
+                        variant="table"
+                      />
+                    </td>
                   </tr>
+                  {batchesExpanded && (
+                    <tr className="bg-[#fffaf5]">
+                      <td colSpan={7} className="px-6 py-3">
+                        <InventoryBatchRows
+                          batches={itemBatches}
+                          onEditBatch={(batch) => openEditBatchModal(item, batch)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                   );
                 })}
               </tbody>
@@ -1313,11 +1430,27 @@ export function StaffInventory() {
           <div className="lg:hidden space-y-4">
             {filteredItems.map((item) => {
               const expired = isExpired(item.expiryDate);
+              const itemBatches = getBatchesForItem(item.id);
+              const batchesExpanded = expandedBatchItemId === item.id;
               return (
               <div key={item.id} className="bg-white rounded-lg p-4 shadow-sm border">
-                <div className={expired ? 'opacity-60' : ''}>
+                <button
+                  type="button"
+                  className={`w-full text-left ${expired ? 'opacity-60' : ''}`}
+                  onClick={() =>
+                    setExpandedBatchItemId((prev) => (prev === item.id ? null : item.id))
+                  }
+                  aria-expanded={batchesExpanded}
+                >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center">
+                    <span className="mr-1 text-gray-500" aria-hidden>
+                      {batchesExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </span>
                     {item.category === 'Medication' ? (
                       <MedicationIcon className="h-8 w-8 mr-3" />
                     ) : item.category === 'Diagnostic' ? (
@@ -1326,8 +1459,6 @@ export function StaffInventory() {
                       <SurgicalIcon className="h-8 w-8 mr-3" />
                     ) : item.category === 'Supplies' ? (
                       <SuppliesIcon className="h-8 w-8 mr-3" />
-                    ) : item.category === 'Equipment' ? (
-                      <EquipmentIcon className="h-8 w-8 mr-3" />
                     ) : (
                       <Package className="h-8 w-8 text-gray-400 mr-3" />
                     )}
@@ -1354,7 +1485,9 @@ export function StaffInventory() {
                   <div>
                     <span className="text-gray-500">Expiry:</span>
                     <p className={`font-medium ${expired ? 'text-red-600' : 'text-gray-900'}`}>
-                      {new Date(item.expiryDate).toLocaleDateString()}
+                      {item.expiryDate
+                        ? new Date(item.expiryDate + 'T12:00:00').toLocaleDateString()
+                        : '—'}
                     </p>
                   </div>
                   <div>
@@ -1381,21 +1514,23 @@ export function StaffInventory() {
                     </p>
                   </div>
                 </div>
-                </div>
-                <div className="pt-3 border-t">
+                </button>
+                {batchesExpanded && (
+                  <InventoryBatchRows
+                    batches={itemBatches}
+                    variant="card"
+                    onEditBatch={(batch) => openEditBatchModal(item, batch)}
+                  />
+                )}
+                <div className="pt-3 border-t" onClick={(e) => e.stopPropagation()}>
                   <ItemActionsMenu
-                    item={item}
                     isOpen={actionMenuOpenId === item.id}
                     onToggle={() =>
                       setActionMenuOpenId((prev) => (prev === item.id ? null : item.id))
                     }
-                    onAddStock={() => {
+                    onAddBatch={() => {
                       setActionMenuOpenId(null);
-                      openAdjustModal(item, 1);
-                    }}
-                    onDeductStock={() => {
-                      setActionMenuOpenId(null);
-                      openAdjustModal(item, -1);
+                      openAddBatchModal(item);
                     }}
                     onInventorySettings={() => {
                       setActionMenuOpenId(null);
@@ -1479,9 +1614,36 @@ export function StaffInventory() {
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900 space-y-1">
                             {deduction.itemsUsed.map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <CategoryIcon category={item.itemCategory} className="h-4 w-4" />
-                                <span>{item.itemName} ({item.quantity})</span>
+                              <div key={idx} className="text-sm">
+                                <div className="flex items-center gap-2">
+                                  <CategoryIcon category={item.itemCategory} className="h-4 w-4" />
+                                  <span className="text-gray-900">{item.itemName} ({item.quantity})</span>
+                                </div>
+                                {item.fefoAllocations && item.fefoAllocations.length > 0 && (
+                                  <ul className="ml-6 mt-0.5 space-y-0.5">
+                                    {item.fefoAllocations.map((alloc, ai) => {
+                                      const batch = getBatchesForItem(item.itemId).find(
+                                        (b) => b.id === alloc.batchId
+                                      );
+                                      const batchName =
+                                        batch?.batchName?.trim() || 'Unnamed batch';
+                                      const remaining =
+                                        batch?.quantityRemaining ?? '—';
+                                      return (
+                                        <li
+                                          key={`${alloc.batchId}-${ai}`}
+                                          className="text-xs text-[#8B5A36]"
+                                        >
+                                          {batchName} · Exp{' '}
+                                          {new Date(
+                                            alloc.expiryDate + 'T12:00:00'
+                                          ).toLocaleDateString()}{' '}
+                                          · {remaining} left
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1525,58 +1687,191 @@ export function StaffInventory() {
         </div>
       )}
 
-      {/* Stock Adjustment Modal */}
-      {adjustingStock && (
+      {/* Edit Batch Modal */}
+      {editingBatch && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setAdjustingStock(null)} />
+            <div
+              className="fixed inset-0 bg-gray-600 bg-opacity-75"
+              onClick={() => setEditingBatch(null)}
+            />
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
               <div className="p-6 border-b">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {adjustingStock.adjustment > 0 ? 'Add Stock' : 'Deduct Stock'}
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">{adjustingStock.item.name}</p>
+                <h3 className="text-lg font-semibold text-gray-900">Edit Batch</h3>
+                <p className="text-sm text-gray-600 mt-1">{editingBatch.item.name}</p>
               </div>
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Current Stock:{' '}
-                    <span className="font-bold">
-                      {formatStockWithUnit(adjustingStock.item.stock, adjustingStock.item.unitOfMeasurement)}
-                    </span>
-                  </label>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {adjustingStock.adjustment > 0 ? 'Quantity to Add' : 'Quantity to Deduct'}
+                    Batch Name *
                   </label>
                   <input
-                    type="number"
-                    min="1"
-                    defaultValue={1}
-                    id="adjustment-amount"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter quantity"
+                    type="text"
+                    value={editBatchName}
+                    onChange={(e) => setEditBatchName(e.target.value)}
+                    placeholder="e.g. Lot A / Supplier shipment"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity Remaining *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditBatchQty((prev) => String(Math.max(0, (parseInt(prev, 10) || 0) - 1)))
+                      }
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-red-600 text-white hover:bg-red-700"
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="numeric"
+                      value={editBatchQty}
+                      onChange={(e) => setEditBatchQty(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg text-center focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditBatchQty((prev) => String((parseInt(prev, 10) || 0) + 1))
+                      }
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-green-600 text-white hover:bg-green-700"
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date Received *
+                  </label>
+                  <input
+                    type="date"
+                    value={editBatchReceived}
+                    onChange={(e) => setEditBatchReceived(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Expiry Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={editBatchExpiry}
+                    onChange={(e) => setEditBatchExpiry(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
                   />
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
-                    onClick={() => setAdjustingStock(null)}
+                    onClick={() => setEditingBatch(null)}
                     className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={() => {
-                      const input = document.getElementById('adjustment-amount') as HTMLInputElement;
-                      const amount = parseInt(input.value) || 1;
-                      handleStockAdjustment(adjustingStock.item, adjustingStock.adjustment * amount);
-                    }}
-                    className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors ${
-                      adjustingStock.adjustment > 0
-                        ? 'bg-green-600 hover:bg-green-700'
-                        : 'bg-red-600 hover:bg-red-700'
-                    }`}
+                    onClick={() => void handleSaveBatchEdit()}
+                    className="flex-1 px-4 py-2 bg-[#8B5A36] text-white rounded-lg hover:bg-[#5C4033] transition-colors"
                   >
-                    {adjustingStock.adjustment > 0 ? 'Add Stock' : 'Deduct Stock'}
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Batch Modal */}
+      {addingBatchItem && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-gray-600 bg-opacity-75"
+              onClick={() => {
+                setAddingBatchItem(null);
+                setBatchName('');
+                setReceiveExpiry('');
+                setReceiveDate('');
+              }}
+            />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="p-6 border-b">
+                <h3 className="text-lg font-semibold text-gray-900">Add Batch</h3>
+                <p className="text-sm text-gray-600 mt-1">{addingBatchItem.name}</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Batch Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={batchName}
+                    onChange={(e) => setBatchName(e.target.value)}
+                    placeholder="e.g. Lot A / Supplier shipment"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity Received *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={batchQuantity}
+                    onChange={(e) => setBatchQuantity(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date Received *
+                  </label>
+                  <input
+                    type="date"
+                    value={receiveDate}
+                    onChange={(e) => setReceiveDate(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Expiry Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={receiveExpiry}
+                    onChange={(e) => setReceiveExpiry(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B5A36] focus:border-transparent"
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => {
+                      setAddingBatchItem(null);
+                      setBatchName('');
+                      setReceiveExpiry('');
+                      setReceiveDate('');
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => void handleAddBatch()}
+                    className="flex-1 px-4 py-2 bg-[#8B5A36] text-white rounded-lg hover:bg-[#5C4033] transition-colors"
+                  >
+                    Add Batch
                   </button>
                 </div>
               </div>

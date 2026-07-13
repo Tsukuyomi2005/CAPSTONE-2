@@ -12,7 +12,6 @@ const INVENTORY_CATEGORIES = [
   'Surgical',
   'Diagnostic',
   'Supplies',
-  'Equipment',
 ] as const;
 
 interface InventoryCategorySelectProps {

@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "convex/react";
 // @ts-ignore - API types will be generated when Convex syncs
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { Appointment } from '../types';
+import type { Appointment, FefoAllocation } from '../types';
 import { useRoleStore } from './roleStore';
 
 // Helper function to convert Convex document to frontend type
@@ -34,6 +34,7 @@ function convertAppointment(doc: {
     approvedBy?: string;
     approvedByName?: string;
     approvedAt?: string;
+    fefoAllocations?: FefoAllocation[];
   }>;
   rescheduleCount?: number;
   rescheduleHistory?: Appointment['rescheduleHistory'];

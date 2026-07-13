@@ -4,13 +4,31 @@ export interface InventoryItem {
   category: string;
   stock: number;
   price: number;
-  expiryDate: string;
+  expiryDate?: string;
   reorderPoint?: number;
   targetLevel?: number;
   leadTime?: number;
   safetyStock?: number;
   unitOfMeasurement?: string;
 }
+
+export interface InventoryBatch {
+  id: string;
+  itemId: string;
+  batchName?: string;
+  quantityReceived: number;
+  quantityRemaining: number;
+  dateReceived: string;
+  expiryDate: string;
+  status: 'active' | 'depleted';
+}
+
+export type FefoAllocation = {
+  batchId: string;
+  expiryDate: string;
+  dateReceived: string;
+  quantity: number;
+};
 
 export interface Appointment {
   id: string;
@@ -40,6 +58,7 @@ export interface Appointment {
     approvedBy?: string;
     approvedByName?: string;
     approvedAt?: string;
+    fefoAllocations?: FefoAllocation[];
   }>;
   rescheduleCount?: number;
   rescheduleHistory?: Array<{

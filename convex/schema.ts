@@ -10,13 +10,24 @@ const applicationTables = {
     category: v.string(),
     stock: v.number(),
     price: v.number(),
-    expiryDate: v.string(),
+    /** Nearest active batch expiry (synced); optional until first batch is received */
+    expiryDate: v.optional(v.string()),
     reorderPoint: v.optional(v.number()),
     targetLevel: v.optional(v.number()),
     leadTime: v.optional(v.number()),
     safetyStock: v.optional(v.number()),
     unitOfMeasurement: v.optional(v.string()),
   }),
+  /** Batch-level stock for FEFO (First Expiry, First Out) */
+  inventoryBatches: defineTable({
+    itemId: v.id("inventoryItems"),
+    batchName: v.optional(v.string()),
+    quantityReceived: v.number(),
+    quantityRemaining: v.number(),
+    dateReceived: v.string(),
+    expiryDate: v.string(),
+    status: v.union(v.literal("active"), v.literal("depleted")),
+  }).index("by_item", ["itemId"]),
   appointments: defineTable({
     petName: v.string(),
     ownerName: v.string(),
@@ -60,6 +71,12 @@ const applicationTables = {
       approvedBy: v.optional(v.string()),
       approvedByName: v.optional(v.string()),
       approvedAt: v.optional(v.string()),
+      fefoAllocations: v.optional(v.array(v.object({
+        batchId: v.string(),
+        expiryDate: v.string(),
+        dateReceived: v.string(),
+        quantity: v.number(),
+      }))),
     }))),
     /** Count of owner-initiated reschedules while appointment was confirmed (max 2) */
     rescheduleCount: v.optional(v.number()),

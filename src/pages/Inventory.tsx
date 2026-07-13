@@ -1,12 +1,14 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, Package, TrendingUp } from 'lucide-react';
+import { useState, useMemo, Fragment } from 'react';
+import { Plus, Search, Filter, Edit, Trash2, Package, TrendingUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { useInventoryStore } from '../stores/inventoryStore';
 import { useAppointmentStore } from '../stores/appointmentStore';
 import { useRoleStore } from '../stores/roleStore';
 import { InventoryModal } from '../components/InventoryModal';
+import { InventoryBatchRows } from '../components/InventoryBatchRows';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { InventoryItem } from '../types';
 import { formatStockWithUnit } from '../utils/inventoryDisplay';
+import { getUseNextBatch } from '../utils/fefo';
 
 // Medication Icon Component
 const MedicationIcon = ({ className }: { className?: string }) => (
@@ -62,7 +64,7 @@ interface ADUItem {
 }
 
 export function Inventory() {
-  const { items, deleteItem } = useInventoryStore();
+  const { items, deleteItem, getBatchesForItem } = useInventoryStore();
   const { appointments } = useAppointmentStore();
   const { role } = useRoleStore();
   /** Admin (vet) may view inventory only; catalog changes are done by clinic staff. */
@@ -75,6 +77,7 @@ export function Inventory() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [aduSearchTerm, setAduSearchTerm] = useState('');
   const [aduCategoryFilter, setAduCategoryFilter] = useState('');
+  const [expandedBatchItemId, setExpandedBatchItemId] = useState<string | null>(null);
 
   const categories = [...new Set(items.map(item => item.category))];
 
@@ -183,7 +186,8 @@ export function Inventory() {
   };
 
 
-  const isExpired = (expiryDate: string) => {
+  const isExpired = (expiryDate?: string) => {
+    if (!expiryDate) return false;
     return new Date(expiryDate) < new Date();
   };
 
@@ -315,10 +319,30 @@ export function Inventory() {
                     {filteredItems.map((item) => {
                       const expired = isExpired(item.expiryDate);
                       const expiredMuted = expired ? 'opacity-60' : '';
+                      const itemBatches = getBatchesForItem(item.id);
+                      const useNext = getUseNextBatch(itemBatches);
+                      const batchesExpanded = expandedBatchItemId === item.id;
+                      const colCount = isAdminViewOnly ? 6 : 7;
                       return (
-                      <tr key={item.id} className={`hover:bg-purple-100 transition-colors ${expired ? 'bg-gray-50' : ''}`}>
+                      <Fragment key={item.id}>
+                      <tr
+                        className={`hover:bg-purple-100 transition-colors cursor-pointer ${expired ? 'bg-gray-50' : ''} ${
+                          batchesExpanded ? 'bg-[#f4e4d4]/30' : ''
+                        }`}
+                        onClick={() =>
+                          setExpandedBatchItemId((prev) => (prev === item.id ? null : item.id))
+                        }
+                        aria-expanded={batchesExpanded}
+                      >
                         <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                           <div className="flex items-center">
+                            <span className="mr-1 rounded p-1 text-gray-500" aria-hidden>
+                              {batchesExpanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4" />
+                              )}
+                            </span>
                             {item.category === 'Medication' ? (
                               <MedicationIcon className="h-8 w-8 mr-3" />
                             ) : item.category === 'Diagnostic' ? (
@@ -334,6 +358,12 @@ export function Inventory() {
                             )}
                             <div>
                               <div className="text-sm font-medium text-gray-900">{item.name}</div>
+                              {useNext && (
+                                <p className="text-xs text-[#8B5A36] mt-0.5">
+                                  Next Batch: Exp{' '}
+                                  {new Date(useNext.expiryDate + 'T12:00:00').toLocaleDateString()}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -346,11 +376,16 @@ export function Inventory() {
                         <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${expiredMuted}`}>₱{item.price.toFixed(2)}</td>
                         <td className={`px-6 py-4 whitespace-nowrap ${expiredMuted}`}>
                           <span className={`text-sm ${expired ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                            {new Date(item.expiryDate).toLocaleDateString()}
+                            {item.expiryDate
+                              ? new Date(item.expiryDate + 'T12:00:00').toLocaleDateString()
+                              : '—'}
                           </span>
                         </td>
                         {!isAdminViewOnly && (
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <td
+                            className="px-6 py-4 whitespace-nowrap text-sm font-medium"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleEdit(item)}
@@ -388,6 +423,14 @@ export function Inventory() {
                           )}
                         </td>
                       </tr>
+                      {batchesExpanded && (
+                        <tr className="bg-[#fffaf5]">
+                          <td colSpan={colCount} className="px-6 py-3">
+                            <InventoryBatchRows batches={itemBatches} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                       );
                     })}
                   </tbody>
@@ -398,10 +441,27 @@ export function Inventory() {
               <div className="lg:hidden space-y-4">
                 {filteredItems.map((item) => {
                   const expired = isExpired(item.expiryDate);
+                  const itemBatches = getBatchesForItem(item.id);
+                  const batchesExpanded = expandedBatchItemId === item.id;
                   return (
                   <div key={item.id} className="bg-white rounded-lg p-4 shadow-sm border">
+                    <button
+                      type="button"
+                      className={`w-full text-left ${expired ? 'opacity-60' : ''}`}
+                      onClick={() =>
+                        setExpandedBatchItemId((prev) => (prev === item.id ? null : item.id))
+                      }
+                      aria-expanded={batchesExpanded}
+                    >
                     <div className="flex items-start justify-between mb-3">
-                      <div className={`flex items-center ${expired ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center">
+                        <span className="mr-1 text-gray-500" aria-hidden>
+                          {batchesExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </span>
                         {item.category === 'Medication' ? (
                           <MedicationIcon className="h-8 w-8 mr-3" />
                         ) : item.category === 'Diagnostic' ? (
@@ -419,24 +479,8 @@ export function Inventory() {
                           <h3 className="font-medium text-gray-900">{item.name}</h3>
                         </div>
                       </div>
-                      {!isAdminViewOnly && (
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEdit(item)}
-                            className="text-blue-600 hover:text-blue-900"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm(item.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
                     </div>
-                    <div className={`grid grid-cols-2 gap-4 text-sm ${expired ? 'opacity-60' : ''}`}>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-gray-500">Category:</span>
                         <p className="font-medium">{item.category}</p>
@@ -454,7 +498,9 @@ export function Inventory() {
                       <div>
                         <span className="text-gray-500">Expiry:</span>
                         <p className={`font-medium ${expired ? 'text-red-600' : 'text-gray-900'}`}>
-                          {new Date(item.expiryDate).toLocaleDateString()}
+                          {item.expiryDate
+                            ? new Date(item.expiryDate + 'T12:00:00').toLocaleDateString()
+                            : '—'}
                         </p>
                       </div>
                       <div>
@@ -481,6 +527,28 @@ export function Inventory() {
                         </p>
                       </div>
                     </div>
+                    </button>
+                    {!isAdminViewOnly && (
+                      <div className="flex items-center gap-2 pt-3 border-t mt-3">
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(item.id)}
+                          className="text-red-600 hover:text-red-900"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                    {batchesExpanded && (
+                      <div className="pt-3 border-t mt-3" onClick={(e) => e.stopPropagation()}>
+                        <InventoryBatchRows batches={itemBatches} variant="card" />
+                      </div>
+                    )}
                   </div>
                   );
                 })}
