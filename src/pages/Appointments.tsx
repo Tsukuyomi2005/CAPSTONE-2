@@ -89,30 +89,44 @@ export function Appointments() {
     }
   };
 
+  const getOwnerFormDefaults = (): Pick<typeof formData, 'ownerName' | 'phone' | 'email'> => {
+    const userData = getStoredOwnerData();
+    if (!userData) {
+      return { ownerName: '', phone: '', email: '' };
+    }
+    let email = userData.email || '';
+    if (!email) {
+      try {
+        const currentUserStr = localStorage.getItem('fursure_current_user');
+        if (currentUserStr) {
+          const currentUser = JSON.parse(currentUserStr);
+          email = currentUser.email || currentUser.username || '';
+        }
+      } catch {
+        // ignore
+      }
+    }
+    const fullName =
+      `${userData.firstName || ''} ${userData.lastName || ''}`.trim() ||
+      userData.username ||
+      '';
+    return {
+      ownerName: fullName,
+      phone: userData.phone || '',
+      email,
+    };
+  };
+
   // Auto-populate email, owner name, and phone number for pet owners
   useEffect(() => {
     if (role === 'owner') {
-      const userData = getStoredOwnerData();
-      if (userData) {
-        const currentUserStr = localStorage.getItem('fursure_current_user');
-        let email = userData.email || '';
-        if (!email && currentUserStr) {
-          try {
-            const currentUser = JSON.parse(currentUserStr);
-            email = currentUser.email || currentUser.username || '';
-          } catch {
-            // ignore
-          }
-        }
-        const fullName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.username || '';
-        const phone = userData.phone || '';
-        setFormData(prev => ({
-          ...prev,
-          email: email || prev.email,
-          ownerName: fullName || prev.ownerName,
-          phone: phone || prev.phone,
-        }));
-      }
+      const defaults = getOwnerFormDefaults();
+      setFormData((prev) => ({
+        ...prev,
+        email: defaults.email || prev.email,
+        ownerName: defaults.ownerName || prev.ownerName,
+        phone: defaults.phone || prev.phone,
+      }));
     }
   }, [role]);
 
@@ -507,11 +521,12 @@ export function Appointments() {
     setSelectedVet('');
     setSelectedDate(null);
     setSelectedTime('');
+    const ownerDefaults = role === 'owner' ? getOwnerFormDefaults() : { ownerName: '', phone: '', email: '' };
     setFormData({
       petName: '',
-      ownerName: '',
-      phone: '',
-      email: '',
+      ownerName: ownerDefaults.ownerName,
+      phone: ownerDefaults.phone,
+      email: ownerDefaults.email,
       reason: '',
     });
     setPaymentMethod(isWalkInBooking ? 'at_clinic' : 'online');
@@ -605,11 +620,12 @@ export function Appointments() {
       setSelectedVet('');
       setSelectedDate(null);
       setSelectedTime('');
+      const ownerDefaults = role === 'owner' ? getOwnerFormDefaults() : { ownerName: '', phone: '', email: '' };
       setFormData({
         petName: '',
-        ownerName: '',
-        phone: '',
-        email: '',
+        ownerName: ownerDefaults.ownerName,
+        phone: ownerDefaults.phone,
+        email: ownerDefaults.email,
         reason: '',
       });
       setPaymentMethod(isWalkInBooking ? 'at_clinic' : 'online');

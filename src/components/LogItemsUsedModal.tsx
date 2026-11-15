@@ -94,11 +94,13 @@ export function LogItemsUsedModal({ isOpen, onClose, appointment }: LogItemsUsed
   }, [items]);
 
   const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
-      return matchesSearch && matchesCategory;
-    });
+    return items
+      .filter((item) => {
+        const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+        return matchesSearch && matchesCategory;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
   }, [items, searchQuery, categoryFilter]);
 
   useEffect(() => {
@@ -232,7 +234,13 @@ export function LogItemsUsedModal({ isOpen, onClose, appointment }: LogItemsUsed
     onClose();
   };
 
-  const selectedItemsArray = Array.from(selectedItems.values());
+  const selectedItemsArray = useMemo(
+    () =>
+      Array.from(selectedItems.values()).sort((a, b) =>
+        a.itemName.localeCompare(b.itemName, undefined, { sensitivity: 'base' }),
+      ),
+    [selectedItems],
+  );
 
   if (!isOpen || !appointment) return null;
 

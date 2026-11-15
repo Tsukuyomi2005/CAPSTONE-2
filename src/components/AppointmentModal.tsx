@@ -209,9 +209,9 @@ export function AppointmentModal({ isOpen, onClose, date, time }: AppointmentMod
       
       setFormData({
         petName: '',
-        ownerName: '',
-        phone: '',
-        email: '',
+        ownerName: isPetOwner ? getCurrentUserName() : '',
+        phone: isPetOwner ? getCurrentUserPhone() : '',
+        email: isPetOwner ? getCurrentUserEmail() : '',
         reason: '',
         serviceType: 'consultation',
         vet: allActiveVets.length > 0 ? allActiveVets[0] : ''

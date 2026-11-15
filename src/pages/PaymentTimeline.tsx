@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react';
 import { 
   DollarSign, 
   Clock, 
-  Building2, 
-  Smartphone, 
+  Building2,
+  Smartphone,
+  CreditCard,
   Eye, 
   Download,
   Search,
@@ -104,10 +105,8 @@ const generateTransactions = (
       if (service) {
         serviceName = service.name;
       } else if (legacyServices[appointment.serviceType]) {
-        // Check legacy mapping for backward compatibility
         serviceName = legacyServices[appointment.serviceType];
       } else {
-        // Fallback to the ID if service not found
         serviceName = appointment.serviceType;
       }
     }
@@ -121,15 +120,11 @@ const generateTransactions = (
     } else if (paymentDataMethod === 'paymaya') {
       paymentMethod = 'Online Payment (PayMaya)';
     } else if (paymentDataMethod === 'online') {
-      // Fallback for old data format - check if we can determine from other fields
-      // If phoneNumber exists, it's likely GCash (default), but we can't be sure
-      // For now, default to GCash if we have payment data but method is just 'online'
       paymentMethod = 'Online Payment (GCash)';
     } else if (paymentDataMethod === 'at_clinic') {
       paymentMethod = 'At Clinic';
     }
 
-    // Determine transaction type and create transactions
     const depositAmount = Math.round(appointment.price * 0.3);
     const remainingAmount = appointment.price - depositAmount;
 
@@ -150,12 +145,10 @@ const generateTransactions = (
           appointment,
         });
       }
-      // No-show appointments should not produce pending remaining balance rows.
       return;
     }
 
     if (appointment.paymentStatus === 'down_payment_paid') {
-      // Deposit payment was made online, remaining balance is pending at clinic
       transactions.push({
         id: `${appointment.id}-deposit`,
         transactionId: getTransactionId(appointment, 'deposit'),
@@ -171,7 +164,6 @@ const generateTransactions = (
         appointment,
       });
 
-      // Remaining balance (pending)
       transactions.push({
         id: `${appointment.id}-remaining`,
         transactionId: getTransactionId(appointment, 'remaining'),
@@ -182,16 +174,11 @@ const generateTransactions = (
         time: appointment.time,
         amount: remainingAmount,
         transactionType: 'Remaining Balance',
-        paymentMethod: 'At Clinic', // Remaining is always at clinic
+        paymentMethod: 'At Clinic',
         status: 'Pending',
         appointment,
       });
     } else if (appointment.paymentStatus === 'fully_paid') {
-      // Check if it was a split payment or full payment
-      // If paymentData exists and method is 'online', it's likely a split payment
-      // If paymentData exists and method is 'at_clinic', it's a full payment at clinic
-      // If paymentData doesn't exist or amount matches full price, it's a full payment
-      
       const paymentData = appointment.paymentData || {};
       const isSplitPayment = paymentData.method === 'online' && 
                             (paymentData.amount === depositAmount || 
@@ -199,7 +186,6 @@ const generateTransactions = (
                              paymentData.amount < appointment.price);
 
       if (isSplitPayment) {
-        // Split payment: deposit was paid online, remaining balance paid at clinic
         transactions.push({
           id: `${appointment.id}-deposit`,
           transactionId: getTransactionId(appointment, 'deposit'),
@@ -230,7 +216,6 @@ const generateTransactions = (
           appointment,
         });
       } else {
-        // Full payment at once (either online or at clinic)
         transactions.push({
           id: `${appointment.id}-full`,
           transactionId: getTransactionId(appointment, 'full'),
@@ -247,7 +232,16 @@ const generateTransactions = (
         });
       }
     } else if (appointment.paymentStatus === 'pending' && appointment.status === 'approved') {
-      // Pending payment - deposit not yet paid
+      const pdMethod = appointment.paymentData?.method;
+      let pendingMethod: PaymentMethod = 'At Clinic';
+      if (pdMethod === 'gcash') {
+        pendingMethod = 'Online Payment (GCash)';
+      } else if (pdMethod === 'paymaya') {
+        pendingMethod = 'Online Payment (PayMaya)';
+      } else if (pdMethod === 'online') {
+        pendingMethod = 'Online Payment (GCash)';
+      }
+
       transactions.push({
         id: `${appointment.id}-pending`,
         transactionId: getTransactionId(appointment, 'deposit'),
@@ -258,9 +252,7 @@ const generateTransactions = (
         time: appointment.time,
         amount: depositAmount,
         transactionType: 'Deposit Payment',
-        paymentMethod: appointment.paymentData?.method === 'online' 
-          ? (appointment.paymentData?.method === 'gcash' ? 'Online Payment (GCash)' : 'Online Payment (PayMaya)')
-          : 'At Clinic',
+        paymentMethod: pendingMethod,
         status: 'Pending',
         appointment,
       });
@@ -281,32 +273,28 @@ export function PaymentTimeline() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  // Create appointment ID map for sequential numbering (oldest = 1)
   const appointmentIdMap = useMemo(() => createAppointmentIdMap(appointments), [appointments]);
 
-  // Generate transactions from appointments
-  const allTransactions = useMemo(() => generateTransactions(appointments, services, appointmentIdMap), [appointments, services, appointmentIdMap]);
+  const allTransactions = useMemo(
+    () => generateTransactions(appointments, services, appointmentIdMap),
+    [appointments, services, appointmentIdMap],
+  );
 
-  // Filter transactions
   const filteredTransactions = useMemo(() => {
     let filtered = [...allTransactions];
 
-    // Filter by status
     if (statusFilter !== 'all') {
       filtered = filtered.filter(txn => txn.status.toLowerCase() === statusFilter.toLowerCase());
     }
 
-    // Filter by transaction type
     if (transactionTypeFilter !== 'all') {
       filtered = filtered.filter(txn => txn.transactionType === transactionTypeFilter);
     }
 
-    // Filter by payment method
     if (paymentMethodFilter !== 'all') {
       filtered = filtered.filter(txn => txn.paymentMethod === paymentMethodFilter);
     }
 
-    // Filter by date range
     if (dateRangeFilter !== 'all') {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -336,7 +324,6 @@ export function PaymentTimeline() {
       }
     }
 
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(txn => 
@@ -347,7 +334,6 @@ export function PaymentTimeline() {
       );
     }
 
-    // Sort by date (newest first)
     return filtered.sort((a, b) => {
       const dateA = new Date(a.date).getTime();
       const dateB = new Date(b.date).getTime();
@@ -356,25 +342,33 @@ export function PaymentTimeline() {
     });
   }, [allTransactions, statusFilter, dateRangeFilter, transactionTypeFilter, paymentMethodFilter, searchQuery]);
 
-  // Calculate statistics
   const stats = useMemo(() => {
     const totalSpent = allTransactions
-      .filter(txn => txn.status === 'Paid')
+      .filter((txn) => txn.status === 'Paid')
       .reduce((sum, txn) => sum + txn.amount, 0);
 
     const pendingPayments = allTransactions
-      .filter(txn => txn.status === 'Pending')
+      .filter((txn) => txn.status === 'Pending')
       .reduce((sum, txn) => sum + txn.amount, 0);
 
-    const clinicPayments = allTransactions
-      .filter(txn => txn.paymentMethod === 'At Clinic' && txn.status === 'Paid')
+    // Wallet summary cards: online deposits only (exclude clinic remaining balance)
+    const paidOnlineDeposits = allTransactions.filter(
+      (txn) =>
+        txn.transactionType === 'Deposit Payment' &&
+        (txn.status === 'Paid' || txn.status === 'Paid (Forfeited)') &&
+        (txn.paymentMethod === 'Online Payment (GCash)' ||
+          txn.paymentMethod === 'Online Payment (PayMaya)'),
+    );
+
+    const gcashPayments = paidOnlineDeposits
+      .filter((txn) => txn.paymentMethod === 'Online Payment (GCash)')
       .reduce((sum, txn) => sum + txn.amount, 0);
 
-    const onlinePayments = allTransactions
-      .filter(txn => (txn.paymentMethod === 'Online Payment (GCash)' || txn.paymentMethod === 'Online Payment (PayMaya)') && txn.status === 'Paid')
+    const paymayaPayments = paidOnlineDeposits
+      .filter((txn) => txn.paymentMethod === 'Online Payment (PayMaya)')
       .reduce((sum, txn) => sum + txn.amount, 0);
 
-    return { totalSpent, pendingPayments, clinicPayments, onlinePayments };
+    return { totalSpent, pendingPayments, gcashPayments, paymayaPayments };
   }, [allTransactions]);
 
   const handleViewDetails = (transaction: Transaction) => {
@@ -383,7 +377,6 @@ export function PaymentTimeline() {
   };
 
   const handleExport = (transaction: Transaction) => {
-    // Create a CSV content
     const csvContent = [
       ['Transaction ID', 'Appointment ID', 'Service', 'Date', 'Time', 'Amount', 'Transaction Type', 'Payment Method', 'Status'],
       [
@@ -399,7 +392,6 @@ export function PaymentTimeline() {
       ]
     ].map(row => row.join(',')).join('\n');
 
-    // Create blob and download
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
@@ -431,22 +423,115 @@ export function PaymentTimeline() {
     }
   };
 
+  const renderTransactionRows = (transactions: Transaction[]) => {
+    if (transactions.length === 0) {
+      return (
+        <tr>
+          <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+            No transactions found
+          </td>
+        </tr>
+      );
+    }
+
+    return transactions.map((transaction) => (
+      <tr key={transaction.id} className="hover:bg-gray-50">
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          {transaction.transactionId}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          {transaction.service}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <div>
+            <div>{formatDate(transaction.date)}</div>
+            <div className="text-gray-500">{formatTime(transaction.time)}</div>
+          </div>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          ₱{transaction.amount.toLocaleString()}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          {transaction.transactionType}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <div className="flex items-center gap-2">
+            {transaction.paymentMethod === 'At Clinic' ? (
+              <>
+                <Building2 className="h-4 w-4 text-blue-600" />
+                <span>{transaction.paymentMethod}</span>
+              </>
+            ) : (
+              <>
+                <Smartphone className="h-4 w-4 text-purple-600" />
+                <span>{transaction.paymentMethod}</span>
+              </>
+            )}
+          </div>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          <div className="flex flex-col items-start gap-1">
+            <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
+              {transaction.status}
+            </span>
+            {transaction.status === 'Paid (Forfeited)' && (
+              <span className="text-[11px] text-orange-700">No-show policy applied</span>
+            )}
+          </div>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleViewDetails(transaction)}
+              className="text-blue-600 hover:text-blue-800 transition-colors"
+              title="View Details"
+            >
+              <Eye className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => handleExport(transaction)}
+              className="text-green-600 hover:text-green-800 transition-colors"
+              title="Export Transaction"
+            >
+              <Download className="h-5 w-5" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    ));
+  };
+
+  const transactionTableHeader = (
+    <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
+      <tr>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction Type</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+      </tr>
+    </thead>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Payment Timeline</h1>
         <p className="text-gray-600 mt-2">View and manage your payment transactions</p>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-6 shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Total Spent</p>
               <p className="text-3xl font-bold text-gray-900">₱{stats.totalSpent.toLocaleString()}</p>
-              <p className="text-xs text-gray-500 mt-1">All paid payments</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Online deposits and remaining balances paid at the clinic
+              </p>
             </div>
             <div className="p-3 bg-green-50 rounded-lg">
               <DollarSign className="h-6 w-6 text-green-600" />
@@ -470,12 +555,12 @@ export function PaymentTimeline() {
         <div className="bg-white rounded-lg p-6 shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Clinic Payments</p>
-              <p className="text-3xl font-bold text-gray-900">₱{stats.clinicPayments.toLocaleString()}</p>
-              <p className="text-xs text-gray-500 mt-1">Paid at clinic</p>
+              <p className="text-sm text-gray-600 mb-1">GCash Payments</p>
+              <p className="text-3xl font-bold text-gray-900">₱{stats.gcashPayments.toLocaleString()}</p>
+              <p className="text-xs text-gray-500 mt-1">Deposits paid online via GCash</p>
             </div>
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <Building2 className="h-6 w-6 text-blue-600" />
+            <div className="p-3 bg-sky-50 rounded-lg">
+              <Smartphone className="h-6 w-6 text-sky-600" />
             </div>
           </div>
         </div>
@@ -483,18 +568,17 @@ export function PaymentTimeline() {
         <div className="bg-white rounded-lg p-6 shadow-sm border">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Online Payments</p>
-              <p className="text-3xl font-bold text-gray-900">₱{stats.onlinePayments.toLocaleString()}</p>
-              <p className="text-xs text-gray-500 mt-1">GCash/PayMaya</p>
+              <p className="text-sm text-gray-600 mb-1">PayMaya Payments</p>
+              <p className="text-3xl font-bold text-gray-900">₱{stats.paymayaPayments.toLocaleString()}</p>
+              <p className="text-xs text-gray-500 mt-1">Deposits paid online via PayMaya</p>
             </div>
-            <div className="p-3 bg-purple-50 rounded-lg">
-              <Smartphone className="h-6 w-6 text-purple-600" />
+            <div className="p-3 bg-emerald-50 rounded-lg">
+              <CreditCard className="h-6 w-6 text-emerald-600" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-lg p-6 shadow-sm border">
         <div className="flex flex-col lg:flex-row gap-4 items-end">
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -578,6 +662,7 @@ export function PaymentTimeline() {
               Reset
             </button>
             <button
+              type="button"
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
             >
               <Filter className="h-4 w-4" />
@@ -587,7 +672,6 @@ export function PaymentTimeline() {
         </div>
       </div>
 
-      {/* Transaction History Table */}
       <div className="bg-white rounded-lg shadow-sm border">
         <div className="p-6 border-b flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">Transaction History</h2>
@@ -595,98 +679,14 @@ export function PaymentTimeline() {
 
         <div className="max-h-[min(32rem,calc(100dvh-20rem))] overflow-y-auto overflow-x-auto">
           <table className="w-full">
-            <thead className="sticky top-0 z-10 bg-gray-50 border-b border-gray-200 shadow-sm">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Paid</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Method</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
+            {transactionTableHeader}
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
-                    No transactions found
-                  </td>
-                </tr>
-              ) : (
-                filteredTransactions.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {transaction.transactionId}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {transaction.service}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div>
-                        <div>{formatDate(transaction.date)}</div>
-                        <div className="text-gray-500">{formatTime(transaction.time)}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      ₱{transaction.amount.toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {transaction.transactionType}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="flex items-center gap-2">
-                        {transaction.paymentMethod === 'At Clinic' ? (
-                          <>
-                            <Building2 className="h-4 w-4 text-blue-600" />
-                            <span>{transaction.paymentMethod}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Smartphone className="h-4 w-4 text-purple-600" />
-                            <span>{transaction.paymentMethod}</span>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-col items-start gap-1">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(transaction.status)}`}>
-                          {transaction.status}
-                        </span>
-                        {transaction.status === 'Paid (Forfeited)' && (
-                          <span className="text-[11px] text-orange-700">No-show policy applied</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleViewDetails(transaction)}
-                          className="text-blue-600 hover:text-blue-800 transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="h-5 w-5" />
-                        </button>
-                        <button
-                          onClick={() => handleExport(transaction)}
-                          className="text-green-600 hover:text-green-800 transition-colors"
-                          title="Export Transaction"
-                        >
-                          <Download className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+              {renderTransactionRows(filteredTransactions)}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* View Details Modal */}
       {showDetailsModal && selectedTransaction && (() => {
         const paymentReferenceNumber = resolveReferenceNumber(
           selectedTransaction.appointment.paymentData,
@@ -695,6 +695,16 @@ export function PaymentTimeline() {
             appointmentDate: selectedTransaction.appointment.date,
           },
         );
+
+        const appointmentPrice = selectedTransaction.appointment.price;
+        const paymentBreakdown =
+          appointmentPrice && appointmentPrice > 0
+            ? {
+                total: appointmentPrice,
+                deposit: Math.round(appointmentPrice * 0.3),
+                remaining: appointmentPrice - Math.round(appointmentPrice * 0.3),
+              }
+            : null;
 
         return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -725,6 +735,45 @@ export function PaymentTimeline() {
                     {formatDate(selectedTransaction.date)} · {formatTime(selectedTransaction.time)}
                   </span>
                 </div>
+
+                {paymentBreakdown && (
+                  <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                      Full appointment payment
+                    </p>
+                    <div className="flex justify-between items-center text-gray-900 font-semibold">
+                      <span>Total service price</span>
+                      <span>₱{paymentBreakdown.total.toLocaleString()}</span>
+                    </div>
+                    <div className="mt-3 space-y-1.5 text-sm border-t border-gray-100 pt-3">
+                      <div className="flex justify-between text-gray-600">
+                        <span>
+                          Deposit (30%)
+                          {selectedTransaction.transactionType === 'Deposit Payment' && (
+                            <span className="ml-1 text-purple-600 font-medium">· this transaction</span>
+                          )}
+                        </span>
+                        <span className="font-medium text-gray-900">
+                          ₱{paymentBreakdown.deposit.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-gray-600">
+                        <span>
+                          Remaining balance
+                          {selectedTransaction.transactionType === 'Remaining Balance' && (
+                            <span className="ml-1 text-purple-600 font-medium">· this transaction</span>
+                          )}
+                        </span>
+                        <span className="font-medium text-gray-900">
+                          ₱{paymentBreakdown.remaining.toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 pt-1">
+                        Deposit is paid online; remaining balance is settled at the clinic.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reference</p>
@@ -830,4 +879,3 @@ export function PaymentTimeline() {
     </div>
   );
 }
-

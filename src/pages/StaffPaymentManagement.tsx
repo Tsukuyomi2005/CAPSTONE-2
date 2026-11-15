@@ -36,15 +36,22 @@ export function StaffPaymentManagement() {
     return price - calculateDepositAmount(price);
   };
 
-  // Get appointments with pending payments
+  // Get appointments with pending payments (earliest appointment first)
   const pendingPaymentAppointments = useMemo(() => {
-    return appointments.filter((apt: Appointment) => {
-      // Include appointments that are approved and have pending payments
-      return apt.status === 'approved' && 
-             apt.price && 
-             apt.price > 0 &&
-             (apt.paymentStatus === 'pending' || apt.paymentStatus === 'down_payment_paid');
-    });
+    return appointments
+      .filter((apt: Appointment) => {
+        return (
+          apt.status === 'approved' &&
+          apt.price &&
+          apt.price > 0 &&
+          (apt.paymentStatus === 'pending' || apt.paymentStatus === 'down_payment_paid')
+        );
+      })
+      .sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.time.localeCompare(b.time);
+      });
   }, [appointments]);
 
   const noShowForfeitureAmount = useMemo(() => {
