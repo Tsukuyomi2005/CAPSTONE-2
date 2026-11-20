@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "convex/react";
 // @ts-ignore - API types will be generated when Convex syncs
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { Service } from '../types';
+import type { Service, WeightTier } from '../types';
 
 // Helper function to convert Convex document to frontend type
 function convertService(doc: {
@@ -12,6 +12,7 @@ function convertService(doc: {
   description: string;
   price: number;
   durationMinutes?: number;
+  weightTiers?: WeightTier[];
 }): Service {
   return {
     id: doc._id,
@@ -19,6 +20,7 @@ function convertService(doc: {
     description: doc.description,
     price: doc.price,
     durationMinutes: doc.durationMinutes,
+    weightTiers: doc.weightTiers,
   };
 }
 
@@ -40,16 +42,25 @@ export function useServiceStore() {
       description: service.description,
       price: service.price,
       durationMinutes: service.durationMinutes,
+      weightTiers: service.weightTiers,
     });
   };
 
-  const updateService = async (id: string, updates: Partial<Service>) => {
+  /**
+   * `updates.weightTiers`: an array sets weight-based pricing, `null` switches back
+   * to a flat price, `undefined` leaves pricing mode untouched.
+   */
+  const updateService = async (
+    id: string,
+    updates: Partial<Omit<Service, 'weightTiers'>> & { weightTiers?: WeightTier[] | null },
+  ) => {
     const updateData: {
       id: Id<"services">;
       name?: string;
       description?: string;
       price?: number;
       durationMinutes?: number;
+      weightTiers?: WeightTier[] | null;
     } = {
       id: id as Id<"services">,
     };
@@ -58,6 +69,7 @@ export function useServiceStore() {
     if (updates.description !== undefined) updateData.description = updates.description;
     if (updates.price !== undefined) updateData.price = updates.price;
     if (updates.durationMinutes !== undefined) updateData.durationMinutes = updates.durationMinutes;
+    if (updates.weightTiers !== undefined) updateData.weightTiers = updates.weightTiers;
 
     await updateServiceMutation(updateData);
   };
@@ -73,4 +85,3 @@ export function useServiceStore() {
     deleteService,
   };
 }
-

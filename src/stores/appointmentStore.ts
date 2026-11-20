@@ -21,6 +21,8 @@ function convertAppointment(doc: {
   notes?: string;
   serviceType?: string;
   price?: number;
+  petWeightKg?: number;
+  priceTierLabel?: string;
   paymentStatus?: 'pending' | 'down_payment_paid' | 'fully_paid';
   paymentData?: any;
   itemsUsed?: Array<{
@@ -60,6 +62,8 @@ function convertAppointment(doc: {
     notes: doc.notes,
     serviceType: doc.serviceType,
     price: doc.price,
+    petWeightKg: doc.petWeightKg,
+    priceTierLabel: doc.priceTierLabel,
     paymentStatus: doc.paymentStatus,
     paymentData: doc.paymentData,
     itemsUsed: doc.itemsUsed,
@@ -143,6 +147,8 @@ export function useAppointmentStore() {
       notes: appointment.notes,
       serviceType: appointment.serviceType,
       price: appointment.price,
+      petWeightKg: appointment.petWeightKg,
+      priceTierLabel: appointment.priceTierLabel,
       paymentStatus: appointment.paymentStatus,
       paymentData: appointment.paymentData,
     });

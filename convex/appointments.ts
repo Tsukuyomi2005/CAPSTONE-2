@@ -37,6 +37,8 @@ export const list = query({
       notes: v.optional(v.string()),
       serviceType: v.optional(v.string()),
       price: v.optional(v.number()),
+      petWeightKg: v.optional(v.number()),
+      priceTierLabel: v.optional(v.string()),
       paymentStatus: v.optional(
         v.union(
           v.literal("pending"),
@@ -140,6 +142,8 @@ export const listByDate = query({
       notes: v.optional(v.string()),
       serviceType: v.optional(v.string()),
       price: v.optional(v.number()),
+      petWeightKg: v.optional(v.number()),
+      priceTierLabel: v.optional(v.string()),
       paymentStatus: v.optional(
         v.union(
           v.literal("pending"),
@@ -231,6 +235,8 @@ export const add = mutation({
     notes: v.optional(v.string()),
     serviceType: v.optional(v.string()),
     price: v.optional(v.number()),
+    petWeightKg: v.optional(v.number()),
+    priceTierLabel: v.optional(v.string()),
     paymentStatus: v.optional(
       v.union(
         v.literal("pending"),

@@ -1,10 +1,21 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  getLowestTierPrice,
+  validateWeightTiers,
+  type WeightTier,
+} from "./servicePricing";
 
 const SERVICE_NAME_MIN = 5;
 const SERVICE_NAME_MAX = 50;
 const SERVICE_DESC_MIN = 25;
 const SERVICE_DESC_MAX = 200;
+
+const weightTierValidator = v.object({
+  label: v.string(),
+  maxKg: v.optional(v.number()),
+  price: v.number(),
+});
 
 function assertServiceNameAndDescription(name: string, description: string) {
   const n = name.trim();
@@ -21,6 +32,18 @@ function assertServiceNameAndDescription(name: string, description: string) {
   }
 }
 
+/** Trims labels and validates the tiers; throws if invalid. */
+function normalizeWeightTiers(tiers: WeightTier[]): WeightTier[] {
+  const normalized = tiers.map((t) => ({
+    label: t.label.trim(),
+    ...(t.maxKg !== undefined ? { maxKg: t.maxKg } : {}),
+    price: t.price,
+  }));
+  const error = validateWeightTiers(normalized);
+  if (error) throw new Error(error);
+  return normalized;
+}
+
 /**
  * Query all services
  */
@@ -34,6 +57,7 @@ export const list = query({
       description: v.string(),
       price: v.number(),
       durationMinutes: v.optional(v.number()),
+      weightTiers: v.optional(v.array(weightTierValidator)),
     })
   ),
   handler: async (ctx) => {
@@ -50,14 +74,26 @@ export const add = mutation({
     description: v.string(),
     price: v.number(),
     durationMinutes: v.optional(v.number()),
+    weightTiers: v.optional(v.array(weightTierValidator)),
   },
   returns: v.id("services"),
   handler: async (ctx, args) => {
     const name = args.name.trim();
     const description = args.description.trim();
     assertServiceNameAndDescription(name, description);
+    const { weightTiers: rawTiers, ...rest } = args;
+    if (rawTiers && rawTiers.length > 0) {
+      const weightTiers = normalizeWeightTiers(rawTiers);
+      return await ctx.db.insert("services", {
+        ...rest,
+        name,
+        description,
+        price: getLowestTierPrice(weightTiers),
+        weightTiers,
+      });
+    }
     return await ctx.db.insert("services", {
-      ...args,
+      ...rest,
       name,
       description,
     });
@@ -65,7 +101,7 @@ export const add = mutation({
 });
 
 /**
- * Update a service
+ * Update a service. Pass `weightTiers: null` to switch back to a flat price.
  */
 export const update = mutation({
   args: {
@@ -74,10 +110,11 @@ export const update = mutation({
     description: v.optional(v.string()),
     price: v.optional(v.number()),
     durationMinutes: v.optional(v.number()),
+    weightTiers: v.optional(v.union(v.array(weightTierValidator), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { id, ...updates } = args;
+    const { id, weightTiers: rawTiers, ...updates } = args;
     const service = await ctx.db.get(id);
     if (!service) {
       throw new Error("Service not found");
@@ -92,7 +129,20 @@ export const update = mutation({
       updates.description = updates.description.trim();
     }
     assertServiceNameAndDescription(nextName, nextDesc);
-    await ctx.db.patch(id, updates);
+
+    if (rawTiers === null) {
+      // Back to flat pricing: removes the field.
+      await ctx.db.patch(id, { ...updates, weightTiers: undefined });
+    } else if (rawTiers !== undefined) {
+      const weightTiers = normalizeWeightTiers(rawTiers);
+      await ctx.db.patch(id, {
+        ...updates,
+        price: getLowestTierPrice(weightTiers),
+        weightTiers,
+      });
+    } else {
+      await ctx.db.patch(id, updates);
+    }
     return null;
   },
 });
@@ -110,4 +160,3 @@ export const remove = mutation({
     return null;
   },
 });
-

@@ -1,17 +1,60 @@
 import { useState, useEffect, type ChangeEvent, type FormEvent } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2 } from 'lucide-react';
 import { useServiceStore } from '../stores/serviceStore';
 import type { Service } from '../types';
+import {
+  MAX_WEIGHT_TIERS,
+  MIN_WEIGHT_TIERS,
+  TIER_LABEL_MAX,
+  getLowestTierPrice,
+  validateWeightTiers,
+  type WeightTier,
+} from '../../convex/servicePricing';
 
 const SERVICE_NAME_MIN = 5;
 const SERVICE_NAME_MAX = 50;
 const SERVICE_DESC_MIN = 25;
 const SERVICE_DESC_MAX = 200;
 
+type PricingMode = 'flat' | 'weight';
+
+/** Tier row as edited in the form (numbers kept as strings so inputs can be cleared). */
+interface TierRow {
+  label: string;
+  maxKg: string;
+  price: string;
+}
+
+const DEFAULT_TIER_ROWS: TierRow[] = [
+  { label: 'Small', maxKg: '5', price: '' },
+  { label: 'Medium', maxKg: '15', price: '' },
+  { label: 'Large', maxKg: '', price: '' },
+];
+
 interface ServiceModalProps {
   isOpen: boolean;
   onClose: () => void;
   service?: Service | null;
+}
+
+function tiersToRows(tiers: WeightTier[]): TierRow[] {
+  return tiers.map((t) => ({
+    label: t.label,
+    maxKg: t.maxKg !== undefined ? String(t.maxKg) : '',
+    price: String(t.price),
+  }));
+}
+
+function rowsToTiers(rows: TierRow[]): WeightTier[] {
+  return rows.map((row, index) => {
+    const isLast = index === rows.length - 1;
+    const tier: WeightTier = {
+      label: row.label.trim(),
+      price: Number(row.price),
+    };
+    if (!isLast) tier.maxKg = Number(row.maxKg);
+    return tier;
+  });
 }
 
 export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
@@ -22,6 +65,8 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
     price: 0,
     durationMinutes: '', // keep as string so input can be cleared
   });
+  const [pricingMode, setPricingMode] = useState<PricingMode>('flat');
+  const [tierRows, setTierRows] = useState<TierRow[]>(DEFAULT_TIER_ROWS);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -33,6 +78,13 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
         price: service.price,
         durationMinutes: service.durationMinutes != null ? String(service.durationMinutes) : '',
       });
+      if (service.weightTiers && service.weightTiers.length > 0) {
+        setPricingMode('weight');
+        setTierRows(tiersToRows(service.weightTiers));
+      } else {
+        setPricingMode('flat');
+        setTierRows(DEFAULT_TIER_ROWS);
+      }
     } else {
       setFormData({
         name: '',
@@ -40,9 +92,29 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
         price: 0,
         durationMinutes: '',
       });
+      setPricingMode('flat');
+      setTierRows(DEFAULT_TIER_ROWS);
     }
     setErrors({});
   }, [service, isOpen]);
+
+  const updateTierRow = (index: number, patch: Partial<TierRow>) => {
+    setTierRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const addTierRow = () => {
+    setTierRows((rows) => {
+      if (rows.length >= MAX_WEIGHT_TIERS) return rows;
+      // Insert before the last (open-ended) tier so it stays last.
+      const next = [...rows];
+      next.splice(rows.length - 1, 0, { label: '', maxKg: '', price: '' });
+      return next;
+    });
+  };
+
+  const removeTierRow = (index: number) => {
+    setTierRows((rows) => (rows.length <= MIN_WEIGHT_TIERS ? rows : rows.filter((_, i) => i !== index)));
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -64,8 +136,13 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
     } else if (descLen > SERVICE_DESC_MAX) {
       newErrors.description = `Description must be at most ${SERVICE_DESC_MAX} characters.`;
     }
-    if (formData.price <= 0) {
-      newErrors.price = 'Price must be greater than 0';
+    if (pricingMode === 'flat') {
+      if (formData.price <= 0) {
+        newErrors.price = 'Price must be greater than 0';
+      }
+    } else {
+      const tierError = validateWeightTiers(rowsToTiers(tierRows));
+      if (tierError) newErrors.tiers = tierError;
     }
     const durationValue = Number(formData.durationMinutes);
     if (!formData.durationMinutes || Number.isNaN(durationValue) || durationValue <= 0) {
@@ -84,16 +161,18 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
     setIsSubmitting(true);
     try {
       const durationValue = Number(formData.durationMinutes);
+      const tiers = pricingMode === 'weight' ? rowsToTiers(tierRows) : null;
       const payload = {
         name: formData.name.trim(),
         description: formData.description.trim(),
-        price: formData.price,
+        // For weight-based services the price is the lowest tier ("from" price).
+        price: tiers ? getLowestTierPrice(tiers) : formData.price,
         durationMinutes: durationValue,
       };
       if (service) {
-        await updateService(service.id, payload);
+        await updateService(service.id, { ...payload, weightTiers: tiers });
       } else {
-        await addService(payload);
+        await addService({ ...payload, ...(tiers ? { weightTiers: tiers } : {}) });
       }
       onClose();
     } catch (error) {
@@ -106,11 +185,16 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
 
   if (!isOpen) return null;
 
+  const inputClass = (hasError: boolean) =>
+    `w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+      hasError ? 'border-red-500' : 'border-gray-300'
+    }`;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={onClose} />
-        <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
+        <div className="relative bg-white rounded-lg shadow-xl max-w-xl w-full">
           <div className="flex items-center justify-between p-6 border-b">
             <h3 className="text-lg font-semibold text-gray-900">
               {service ? 'Edit Service' : 'Add New Service'}
@@ -133,9 +217,7 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
                 value={formData.name}
                 maxLength={SERVICE_NAME_MAX}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, name: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.name ? 'border-red-500' : 'border-gray-300'
-                }`}
+                className={inputClass(!!errors.name)}
                 placeholder="Enter service name"
               />
               <p className="text-xs text-gray-500 mt-1">
@@ -152,9 +234,7 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
                 value={formData.description}
                 maxLength={SERVICE_DESC_MAX}
                 onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setFormData({ ...formData, description: e.target.value })}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.description ? 'border-red-500' : 'border-gray-300'
-                }`}
+                className={inputClass(!!errors.description)}
                 rows={3}
                 placeholder="Enter service description"
               />
@@ -165,21 +245,118 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price (₱) *
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Pricing *
               </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={formData.price}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.price ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="0.00"
-              />
-              {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
+              <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden mb-3">
+                <button
+                  type="button"
+                  onClick={() => setPricingMode('flat')}
+                  className={`px-4 py-2 text-sm transition-colors ${
+                    pricingMode === 'flat' ? 'bg-[#6b4423] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Flat price
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPricingMode('weight')}
+                  className={`px-4 py-2 text-sm border-l border-gray-300 transition-colors ${
+                    pricingMode === 'weight' ? 'bg-[#6b4423] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Price by pet weight
+                </button>
+              </div>
+
+              {pricingMode === 'flat' ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Price (₱) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.price}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
+                    className={inputClass(!!errors.price)}
+                    placeholder="0.00"
+                  />
+                  {errors.price && <p className="text-red-500 text-sm mt-1">{errors.price}</p>}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">
+                    The price is picked automatically from the pet&apos;s weight when booking. Tiers go from
+                    lightest to heaviest; the last tier covers every weight above the one before it.
+                  </p>
+                  <div className="grid grid-cols-[1fr_6.5rem_7rem_2rem] gap-2 text-xs font-medium text-gray-500 px-1">
+                    <span>Tier label</span>
+                    <span>Up to (kg)</span>
+                    <span>Price (₱)</span>
+                    <span />
+                  </div>
+                  {tierRows.map((row, index) => {
+                    const isLast = index === tierRows.length - 1;
+                    return (
+                      <div key={index} className="grid grid-cols-[1fr_6.5rem_7rem_2rem] gap-2 items-center">
+                        <input
+                          type="text"
+                          value={row.label}
+                          maxLength={TIER_LABEL_MAX}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => updateTierRow(index, { label: e.target.value })}
+                          className={inputClass(false)}
+                          placeholder="e.g. Small"
+                        />
+                        {isLast ? (
+                          <div className="px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-500">
+                            and above
+                          </div>
+                        ) : (
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={row.maxKg}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) => updateTierRow(index, { maxKg: e.target.value })}
+                            className={inputClass(false)}
+                            placeholder="kg"
+                          />
+                        )}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={row.price}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => updateTierRow(index, { price: e.target.value })}
+                          className={inputClass(false)}
+                          placeholder="0.00"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeTierRow(index)}
+                          disabled={tierRows.length <= MIN_WEIGHT_TIERS}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                          title="Remove tier"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={addTierRow}
+                    disabled={tierRows.length >= MAX_WEIGHT_TIERS}
+                    className="flex items-center gap-1 text-sm text-[#6b4423] hover:underline disabled:opacity-40 disabled:no-underline"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add tier
+                  </button>
+                  {errors.tiers && <p className="text-red-500 text-sm">{errors.tiers}</p>}
+                </div>
+              )}
             </div>
 
             <div>
@@ -194,9 +371,7 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
                 onChange={(e: ChangeEvent<HTMLInputElement>) =>
                   setFormData({ ...formData, durationMinutes: e.target.value })
                 }
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                  errors.durationMinutes ? 'border-red-500' : 'border-gray-300'
-                }`}
+                className={inputClass(!!errors.durationMinutes)}
                 placeholder="e.g. 30"
               />
               {errors.durationMinutes && <p className="text-red-500 text-sm mt-1">{errors.durationMinutes}</p>}
@@ -230,4 +405,3 @@ export function ServiceModal({ isOpen, onClose, service }: ServiceModalProps) {
     </div>
   );
 }
-

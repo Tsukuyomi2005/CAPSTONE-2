@@ -14,6 +14,7 @@ import { LegalDocumentModal } from '../components/LegalDocumentModal';
 import { AppointmentActions } from '../components/AppointmentActions';
 import { toast } from 'sonner';
 import type { Appointment, Service } from '../types';
+import { describeTierRange, hasWeightTiers, resolveServicePrice } from '../../convex/servicePricing';
 import 'react-calendar/dist/Calendar.css';
 
 type BookingStep = 1 | 2 | 3 | 4;
@@ -45,6 +46,21 @@ export function Appointments() {
     email: '',
     reason: '',
   });
+  // Walk-in bookings (admin/staff) type the pet weight; owners use the selected pet record's weight.
+  const [walkInPetWeight, setWalkInPetWeight] = useState('');
+
+  const selectedPetRecord = role === 'owner'
+    ? petRecords.find((pet) => pet.petName === formData.petName)
+    : undefined;
+  const petWeightKg: number | undefined = role === 'owner'
+    ? selectedPetRecord?.weight
+    : (walkInPetWeight ? Number(walkInPetWeight) : undefined);
+  const needsWeight = !!selectedService && hasWeightTiers(selectedService);
+  const { price: bookingPrice, tier: bookingTier } = selectedService
+    ? resolveServicePrice(selectedService, petWeightKg)
+    : { price: 0, tier: null };
+  const bookingDeposit = Math.round(bookingPrice * 0.3);
+
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
   const [receiptData, setReceiptData] = useState<PaymentReceiptData | null>(null);
@@ -489,6 +505,14 @@ export function Appointments() {
       toast.error('Pet name is required');
       return false;
     }
+    if (needsWeight && !bookingTier) {
+      toast.error(
+        role === 'owner'
+          ? 'This service is priced by weight. Please update your pet\'s weight in Pet Records.'
+          : 'This service is priced by weight. Please enter the pet\'s weight in kg.'
+      );
+      return false;
+    }
     if (!formData.ownerName.trim()) {
       toast.error('Owner name is required');
       return false;
@@ -516,6 +540,7 @@ export function Appointments() {
   };
 
   const resetBookingForm = () => {
+    setWalkInPetWeight('');
     setCurrentStep(1);
     setSelectedService(null);
     setSelectedVet('');
@@ -552,7 +577,8 @@ export function Appointments() {
         vet: selectedVet,
         status: 'pending',
         serviceType: selectedService.id,
-        price: selectedService.price,
+        price: bookingPrice,
+        ...(bookingTier ? { petWeightKg: petWeightKg, priceTierLabel: bookingTier.label } : {}),
         paymentStatus: 'down_payment_paid',
         paymentData: {
           ...paymentData,
@@ -605,7 +631,8 @@ export function Appointments() {
         vet: selectedVet,
         status: 'pending',
         serviceType: selectedService.id,
-        price: selectedService.price,
+        price: bookingPrice,
+        ...(bookingTier ? { petWeightKg: petWeightKg, priceTierLabel: bookingTier.label } : {}),
         paymentStatus: 'pending',
         paymentData: {
           method: 'at_clinic'
@@ -615,6 +642,7 @@ export function Appointments() {
       toast.success('Appointment booked successfully!');
       
       // Reset form
+      setWalkInPetWeight('');
       setCurrentStep(1);
       setSelectedService(null);
       setSelectedVet('');
@@ -720,8 +748,18 @@ export function Appointments() {
                     </p>
                   )}
                   <p className="text-lg font-bold text-purple-600 mt-1">
-                    ₱{service.price.toLocaleString()}
+                    {hasWeightTiers(service) ? 'From ' : ''}₱{service.price.toLocaleString()}
                   </p>
+                  {hasWeightTiers(service) && (
+                    <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
+                      {service.weightTiers!.map((tier, i) => (
+                        <li key={i} className="flex justify-between gap-2">
+                          <span>{tier.label} ({describeTierRange(service.weightTiers!, i)})</span>
+                          <span className="font-medium">₱{tier.price.toLocaleString()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </button>
               ))}
             </div>
@@ -1001,6 +1039,45 @@ export function Appointments() {
               )}
             </div>
 
+            {needsWeight && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Pet Weight (kg) *
+                </label>
+                {role === 'owner' ? (
+                  selectedPetRecord ? (
+                    <p className="text-sm text-gray-700">
+                      {selectedPetRecord.weight} kg
+                      {bookingTier && (
+                        <span className="text-gray-500"> · {bookingTier.label} tier (₱{bookingTier.price.toLocaleString()})</span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      Select a pet above. This service is priced by weight, taken from your pet&apos;s record.
+                    </p>
+                  )
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={walkInPetWeight}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setWalkInPetWeight(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="Enter pet weight in kg"
+                    />
+                    {bookingTier && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {bookingTier.label} tier · ₱{bookingTier.price.toLocaleString()}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Owner Name *
@@ -1091,6 +1168,19 @@ export function Appointments() {
                   <div>
                     <span className="font-medium text-gray-900">{selectedService.name}</span>
                   </div>
+
+                  {bookingTier && (
+                    <>
+                      <div>
+                        <span className="text-gray-600">Pet weight:</span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-900">
+                          {petWeightKg} kg ({bookingTier.label})
+                        </span>
+                      </div>
+                    </>
+                  )}
                   
                   <div>
                     <span className="text-gray-600">Veterinarian:</span>
@@ -1122,19 +1212,19 @@ export function Appointments() {
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">Total Amount:</span>
                         <span className="text-lg font-bold text-purple-600">
-                          ₱{selectedService.price.toLocaleString()}
+                          {needsWeight && !bookingTier ? '—' : `₱${bookingPrice.toLocaleString()}`}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">30% Deposit:</span>
                         <span className="font-semibold text-purple-600">
-                          ₱{Math.round(selectedService.price * 0.3).toLocaleString()}
+                          {needsWeight && !bookingTier ? '—' : `₱${bookingDeposit.toLocaleString()}`}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="text-gray-600">Balance After Deposit:</span>
                         <span className="font-semibold text-gray-900">
-                          ₱{(selectedService.price - Math.round(selectedService.price * 0.3)).toLocaleString()}
+                          {needsWeight && !bookingTier ? '—' : `₱${(bookingPrice - bookingDeposit).toLocaleString()}`}
                         </span>
                       </div>
                     </div>
@@ -1165,8 +1255,8 @@ export function Appointments() {
                       <h3 className="font-semibold text-gray-900 mb-2">Pay at Clinic</h3>
                       {selectedService && (
                         <div className="text-sm text-gray-600 space-y-1">
-                          <p>Collect the 30% deposit (₱{Math.round(selectedService.price * 0.3).toLocaleString()}) now.</p>
-                          <p>Collect the remaining ₱{(selectedService.price - Math.round(selectedService.price * 0.3)).toLocaleString()} after the appointment.</p>
+                          <p>Collect the 30% deposit (₱{bookingDeposit.toLocaleString()}) now.</p>
+                          <p>Collect the remaining ₱{(bookingPrice - bookingDeposit).toLocaleString()} after the appointment.</p>
                         </div>
                       )}
                     </div>
@@ -1188,7 +1278,7 @@ export function Appointments() {
                     <h3 className="font-semibold text-gray-900 mb-2">Pay Online</h3>
                     {selectedService && (
                       <div className="text-sm text-gray-600 space-y-1">
-                        <p>Pay the 30% deposit of ₱{Math.round(selectedService.price * 0.3).toLocaleString()} via GCash/PayMaya.</p>
+                        <p>Pay the 30% deposit of ₱{bookingDeposit.toLocaleString()} via GCash/PayMaya.</p>
                         <p className="text-xs text-gray-500">Once the deposit is paid, your slot is secured and confirmed by the clinic.</p>
                       </div>
                     )}
@@ -1228,7 +1318,7 @@ export function Appointments() {
             </button>
             <button
               onClick={effectivePaymentMethod === 'online' ? handleProceedToPayment : handleBookAppointment}
-              disabled={!formData.petName || !formData.ownerName || !formData.phone || (role === 'owner' && !formData.email)}
+              disabled={!formData.petName || !formData.ownerName || !formData.phone || (role === 'owner' && !formData.email) || (needsWeight && !bookingTier)}
               className="px-6 py-2 bg-[#6b4423] text-white rounded-lg hover:bg-[#5a3720] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Book Appointment
@@ -1246,7 +1336,7 @@ export function Appointments() {
       <PaymentModal
         isOpen={showPayment}
         onClose={() => setShowPayment(false)}
-        amount={selectedService ? Math.round(selectedService.price * 0.3) : 0}
+        amount={selectedService ? bookingDeposit : 0}
         serviceType={selectedService?.name || ''}
         onPaymentSuccess={handlePaymentSuccess}
         defaultPhoneNumber={role === 'owner' ? (formData.phone || getStoredOwnerData()?.phone || '') : undefined}

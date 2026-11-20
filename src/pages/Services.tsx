@@ -4,6 +4,13 @@ import { useServiceStore } from '../stores/serviceStore';
 import { ServiceModal } from '../components/ServiceModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import type { Service } from '../types';
+import { describeTierRange, hasWeightTiers } from '../../convex/servicePricing';
+
+const formatPeso = (amount: number) =>
+  `₱${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatServicePrice = (service: Service) =>
+  hasWeightTiers(service) ? `From ${formatPeso(service.price)}` : formatPeso(service.price);
 
 export function Services() {
   const { services, deleteService } = useServiceStore();
@@ -98,7 +105,10 @@ export function Services() {
                       <div className="text-sm text-gray-600 max-w-md">{service.description}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">₱{service.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                      <div className="text-sm font-medium text-gray-900">{formatServicePrice(service)}</div>
+                      {hasWeightTiers(service) && (
+                        <div className="text-xs text-gray-500">By weight · {service.weightTiers!.length} tiers</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
@@ -165,7 +175,16 @@ export function Services() {
                   </div>
                   <div>
                     <span className="text-gray-500">Price:</span>
-                    <p className="font-medium text-gray-900">₱{service.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="font-medium text-gray-900">{formatServicePrice(service)}</p>
+                    {hasWeightTiers(service) && (
+                      <ul className="mt-1 text-xs text-gray-600 space-y-0.5">
+                        {service.weightTiers!.map((tier, i) => (
+                          <li key={i}>
+                            {tier.label} ({describeTierRange(service.weightTiers!, i)}): {formatPeso(tier.price)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   <div>
                     <span className="text-gray-500">Duration:</span>

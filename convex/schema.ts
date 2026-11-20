@@ -48,6 +48,8 @@ const applicationTables = {
     notes: v.optional(v.string()),
     serviceType: v.optional(v.string()),
     price: v.optional(v.number()),
+    petWeightKg: v.optional(v.number()),
+    priceTierLabel: v.optional(v.string()),
     paymentStatus: v.optional(
       v.union(
         v.literal("pending"),
@@ -122,6 +124,17 @@ const applicationTables = {
     description: v.string(),
     price: v.number(),
     durationMinutes: v.optional(v.number()),
+    // Optional weight-based pricing. When present (2-10 tiers), `price` holds the lowest tier price ("from" price).
+    // Tiers are ordered by ascending maxKg; the last tier has no maxKg (open-ended).
+    weightTiers: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          maxKg: v.optional(v.number()),
+          price: v.number(),
+        })
+      )
+    ),
   }),
   staff: defineTable({
     name: v.string(),

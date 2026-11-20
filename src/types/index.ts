@@ -1,3 +1,7 @@
+import type { WeightTier } from '../../convex/servicePricing';
+
+export type { WeightTier };
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -45,6 +49,10 @@ export interface Appointment {
   notes?: string;
   serviceType?: string;
   price?: number;
+  /** Pet weight used to pick the price tier at booking (weight-based services only). */
+  petWeightKg?: number;
+  /** Label of the weight tier applied at booking, e.g. "Small". */
+  priceTierLabel?: string;
   paymentStatus?: 'pending' | 'down_payment_paid' | 'fully_paid';
   paymentData?: any;
   itemsUsed?: Array<{
@@ -123,8 +131,11 @@ export interface Service {
   id: string;
   name: string;
   description: string;
+  /** Flat price, or the lowest tier price ("from" price) when `weightTiers` is set. */
   price: number;
   durationMinutes?: number;
+  /** Optional weight-based pricing tiers (ascending maxKg, last tier open-ended). */
+  weightTiers?: WeightTier[];
 }
 
 export interface Staff {

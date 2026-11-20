@@ -18,6 +18,7 @@ import type * as passwordUtils from "../passwordUtils.js";
 import type * as petRecords from "../petRecords.js";
 import type * as router from "../router.js";
 import type * as schedules from "../schedules.js";
+import type * as servicePricing from "../servicePricing.js";
 import type * as services from "../services.js";
 import type * as staff from "../staff.js";
 import type * as users from "../users.js";
@@ -39,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   petRecords: typeof petRecords;
   router: typeof router;
   schedules: typeof schedules;
+  servicePricing: typeof servicePricing;
   services: typeof services;
   staff: typeof staff;
   users: typeof users;
