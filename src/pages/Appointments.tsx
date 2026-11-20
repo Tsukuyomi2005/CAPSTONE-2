@@ -60,6 +60,14 @@ export function Appointments() {
     ? resolveServicePrice(selectedService, petWeightKg)
     : { price: 0, tier: null };
   const bookingDeposit = Math.round(bookingPrice * 0.3);
+  // Walk-in details required before leaving step 3 (reason is optional).
+  const walkInDetailsComplete =
+    formData.petName.trim() !== '' &&
+    formData.ownerName.trim() !== '' &&
+    /^09\d{9}$/.test(formData.phone) &&
+    (!needsWeight || !!bookingTier);
+  const bookingTierIndex =
+    bookingTier && selectedService?.weightTiers ? selectedService.weightTiers.indexOf(bookingTier) : -1;
 
   const [showPayment, setShowPayment] = useState(false);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -418,6 +426,10 @@ export function Appointments() {
     } else if (currentStep === 3) {
       if (!selectedVet) {
         toast.error('Please select a veterinarian');
+        return;
+      }
+      // Walk-in details (pet name, customer name, phone, weight if required) must be complete before step 4.
+      if (isWalkInBooking && !validateForm()) {
         return;
       }
       setCurrentStep(4);
@@ -918,6 +930,36 @@ export function Appointments() {
                       placeholder="Enter pet name"
                     />
                   </div>
+                  {needsWeight && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Pet Weight (kg) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={walkInPetWeight}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setWalkInPetWeight(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Enter pet weight in kg"
+                      />
+                      {bookingTier && selectedService?.weightTiers ? (
+                        <p className="text-sm text-gray-700 mt-1">
+                          Price tier: <span className="font-medium">{bookingTier.label}</span>
+                          {bookingTierIndex >= 0 && (
+                            <span className="text-gray-500"> ({describeTierRange(selectedService.weightTiers, bookingTierIndex)})</span>
+                          )}
+                          {' · '}
+                          <span className="font-semibold text-purple-600">₱{bookingTier.price.toLocaleString()}</span>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Required for this service. The weight sets the price tier.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Customer Name *
@@ -996,7 +1038,7 @@ export function Appointments() {
             </button>
             <button
               onClick={handleNext}
-              disabled={!selectedVet || !selectedDate || !selectedTime}
+              disabled={!selectedVet || !selectedDate || !selectedTime || (isWalkInBooking && !walkInDetailsComplete)}
               className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               Next
@@ -1039,41 +1081,22 @@ export function Appointments() {
               )}
             </div>
 
-            {needsWeight && (
+            {needsWeight && role === 'owner' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Pet Weight (kg) *
                 </label>
-                {role === 'owner' ? (
-                  selectedPetRecord ? (
-                    <p className="text-sm text-gray-700">
-                      {selectedPetRecord.weight} kg
-                      {bookingTier && (
-                        <span className="text-gray-500"> · {bookingTier.label} tier (₱{bookingTier.price.toLocaleString()})</span>
-                      )}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      Select a pet above. This service is priced by weight, taken from your pet&apos;s record.
-                    </p>
-                  )
-                ) : (
-                  <>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.1"
-                      value={walkInPetWeight}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => setWalkInPetWeight(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      placeholder="Enter pet weight in kg"
-                    />
+                {selectedPetRecord ? (
+                  <p className="text-sm text-gray-700">
+                    {selectedPetRecord.weight} kg
                     {bookingTier && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {bookingTier.label} tier · ₱{bookingTier.price.toLocaleString()}
-                      </p>
+                      <span className="text-gray-500"> · {bookingTier.label} tier (₱{bookingTier.price.toLocaleString()})</span>
                     )}
-                  </>
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    Select a pet above. This service is priced by weight, taken from your pet&apos;s record.
+                  </p>
                 )}
               </div>
             )}
